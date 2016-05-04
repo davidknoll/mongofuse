@@ -56,3 +56,6 @@ nbdist/
 nbactions.xml
 .nb-gradle/
 
+### JSDoc ###
+out/
+
