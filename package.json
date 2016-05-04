@@ -1,0 +1,29 @@
+{
+  "name": "mongofuse",
+  "version": "0.0.1",
+  "description": "A FUSE filesystem, backed by MongoDB and written in Node.js. Mostly an exercise for me to learn MongoDB and Node.js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/davidknoll/mongofuse.git"
+  },
+  "keywords": [
+    "fuse",
+    "mongodb",
+    "filesystem",
+    "learning"
+  ],
+  "author": "David Knoll <david@davidknoll.me.uk>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/davidknoll/mongofuse/issues"
+  },
+  "homepage": "https://github.com/davidknoll/mongofuse#readme",
+  "dependencies": {
+    "fuse-bindings": "^2.8.1",
+    "mongojs": "^2.4.0"
+  }
+}
