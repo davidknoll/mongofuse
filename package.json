@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/davidknoll/mongofuse#readme",
   "dependencies": {
+    "daemon": "^1.1.0",
     "fuse-bindings": "^2.8.1",
     "mongojs": "^2.4.0"
   },
