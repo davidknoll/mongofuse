@@ -10,6 +10,7 @@
  */
 
 // Imports
+var async   = require('async');
 var daemon  = require('daemon');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
@@ -36,44 +37,63 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
   }
 
   //daemon();
+  var db = mongojs(argv[1], [ "directory", "inodes" ]);
   var mountPath = argv[2];
+
+  function resolvePath(path, cb) {
+    // Split path into components
+    // Note that splitting "/" on "/" gives two empty-string components, we don't want that
+    if (path === "/") { path = ""; }
+    var names = path.split("/");
+
+    // Create a series of steps to look up each component of the path in turn
+    var tasks = names.map(function (name) {
+      return function (pdoc, cb) {
+        // Look up one component of the path in the directory, return its entry
+        // The root is represented with a null parent and an empty-string name
+        db.directory.findOne({ name: name, parent: pdoc._id }, function (err, doc) {
+          if (err)  { return cb(fuse.EIO,    null); }
+          if (!doc) { return cb(fuse.ENOENT, null); }
+          cb(null, doc);
+        });
+      };
+    });
+    // The first task in a waterfall doesn't get any args apart from the callback
+    tasks.unshift(function (cb) { cb(null, { _id: null }); });
+
+    async.waterfall(tasks, cb);
+  }
+
   fuse.mount(mountPath, {
 
     readdir: function (path, cb) {
-      console.log('readdir(%s)', path);
-      if (path === '/') return cb(0, ['test']);
-      cb(0);
+      // Look up the requested directory itself
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // Look up children of the requested directory
+        db.directory.find({ parent: dirent._id }, function (err, docs) {
+          if (err) { return cb(fuse.EIO); }
+          var names = docs.map(function (cdir) { return cdir.name; });
+          // According to POSIX we're only meant to return . and .. if the entries actually exist,
+          // but if we don't they won't appear in a directory listing
+          names.unshift('..');
+          names.unshift('.');
+          cb(0, names);
+        });
+      });
     },
 
     getattr: function (path, cb) {
-      console.log('getattr(%s)', path);
-      if (path === '/') {
-        cb(0, {
-          mtime: new Date(),
-          atime: new Date(),
-          ctime: new Date(),
-          size: 100,
-          mode: 16877,
-          uid: process.getuid ? process.getuid() : 0,
-          gid: process.getgid ? process.getgid() : 0
+      // Look up the requested directory entry
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // And look up the inode it refers to
+        db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+          if (err)  { return cb(fuse.EIO); }
+          if (!doc) { return cb(fuse.ENOENT); }
+          cb(0, doc);
         });
-        return;
-      }
-
-      if (path === '/test') {
-        cb(0, {
-          mtime: new Date(),
-          atime: new Date(),
-          ctime: new Date(),
-          size: 12,
-          mode: 33188,
-          uid: process.getuid ? process.getuid() : 0,
-          gid: process.getgid ? process.getgid() : 0
-        });
-        return;
-      }
-
-      cb(fuse.ENOENT);
+      });
     },
 
     open: function (path, flags, cb) {
