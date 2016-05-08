@@ -48,6 +48,8 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     }
   };
 
+  // Takes a canonical path, relative to the root of our fs but with leading /,
+  // runs callback with its directory entry
   function resolvePath(path, cb) {
     // Split path into components
     // Note that splitting "/" on "/" gives two empty-string components, we don't want that
@@ -70,6 +72,24 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     tasks.unshift(function (cb) { cb(null, { _id: null }); });
 
     async.waterfall(tasks, cb);
+  }
+
+  // Truncates the file with the specified inode ID to the specified size
+  function itruncate(inode, size, cb) {
+    // Look up that inode
+    db.inodes.findOne({ _id: inode }, function (err, doc) {
+      if (err)  { return cb(fuse.EIO); }
+      if (!doc) { return cb(fuse.ENOENT); }
+      // Truncate to the requested size, by copying into a buffer of that size
+      var buf = new Buffer(size).fill(0);
+      if (doc.data) { doc.data.read(0, size).copy(buf); }
+      doc.data = new mongojs.Binary(buf, 0);
+      // Update the inode
+      db.inodes.update({ _id: inode }, { $set: { data: doc.data } }, function (err, result) {
+        if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
+        cb(0);
+      });
+    });
   }
 
   fuse.mount(mountPath, {
@@ -99,6 +119,7 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
         db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
           if (err)  { return cb(fuse.EIO); }
           if (!doc) { return cb(fuse.ENOENT); }
+          // Get this live rather than storing it
           if (doc.data) { doc.size = doc.data.length(); }
           cb(0, doc);
         });
@@ -118,14 +139,110 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     },
 
     read: function (path, fd, buf, len, pos, cb) {
+      // Look up the inode of the open file
       db.inodes.findOne({ _id: openFiles[fd].inode }, function (err, doc) {
         if (err)  { return cb(fuse.EIO); }
         if (!doc) { return cb(fuse.ENOENT); }
+        if (!doc.data) { return cb(0); }
         // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
         var srcbuf = doc.data.read(pos, len);
         var copied = srcbuf.copy(buf);
         cb(copied);
       });
+    },
+
+    write: function (path, fd, buf, len, pos, cb) {
+      // Look up the inode of the open file
+      db.inodes.findOne({ _id: openFiles[fd].inode }, function (err, doc) {
+        if (err)  { return cb(fuse.EIO); }
+        if (!doc) { return cb(fuse.ENOENT); }
+        // Make sure we have a buffer of exactly the size of the write data
+        var dstbuf = new Buffer(len).fill(0);
+        var copied = buf.copy(dstbuf, 0, 0, len);
+        if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
+        doc.data.write(dstbuf, pos);
+        // Update the inode (yes we're storing the data with the inode right now)
+        db.inodes.update({ _id: openFiles[fd].inode }, { $set: { data: doc.data } }, function (err, result) {
+          if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
+          cb(copied);
+        });
+      });
+    },
+
+    chmod: function (path, mode, cb) {
+      // Look up the requested directory entry
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // And look up the inode it refers to
+        db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+          if (err)  { return cb(fuse.EIO); }
+          if (!doc) { return cb(fuse.ENOENT); }
+          // In testing, the mode passed in does have the file type bits set,
+          // but we probably don't want to go changing them so mask them just in case
+          doc.mode = (doc.mode & 0170000) | (mode & 07777);
+          db.inodes.update({ _id: dirent.inode }, { $set: { mode: doc.mode } }, function (err, result) {
+            if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
+            cb(0);
+          });
+        });
+      });
+    },
+
+    chown: function (path, uid, gid, cb) {
+      // Look up the requested directory entry
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // And look up the inode it refers to
+        db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+          if (err)  { return cb(fuse.EIO); }
+          if (!doc) { return cb(fuse.ENOENT); }
+          // If we're setting only uid or only gid, the other will be -1
+          var set = {};
+          if (uid >= 0) { set.uid = uid; }
+          if (gid >= 0) { set.gid = gid; }
+          db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
+            if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
+            cb(0);
+          });
+        });
+      });
+    },
+
+    utimens: function (path, atime, mtime, cb) {
+      // Look up the requested directory entry
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // And look up the inode it refers to
+        db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+          if (err)  { return cb(fuse.EIO); }
+          if (!doc) { return cb(fuse.ENOENT); }
+          // Store times as UNIX timestamps in milliseconds
+          // If doing touch -a or touch -m, the other time still gets passed
+          // For some strange reason, when testing this by repeatedly touching a file,
+          // the changing time(s) getting passed in here were jumping about randomly over 15min or so
+          var set = {
+            atime: atime.getTime(),
+            mtime: mtime.getTime()
+          };
+          db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
+            if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
+            cb(0);
+          });
+        });
+      });
+    },
+
+    truncate: function (path, size, cb) {
+      // Truncating the inode by path
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        itruncate(dirent.inode, size, cb);
+      });
+    },
+
+    ftruncate: function (path, fd, size, cb) {
+      // Truncating the inode by open file descriptor
+      itruncate(openFiles[fd].inode, size, cb);
     }
 
   }, function (err) {
