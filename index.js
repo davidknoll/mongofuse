@@ -39,6 +39,14 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
   //daemon();
   var db = mongojs(argv[1], [ "directory", "inodes" ]);
   var mountPath = argv[2];
+  var openFiles = {
+    next: 10,
+    add: function (data) {
+      var fd = this.next++;
+      this[fd] = data;
+      return fd;
+    }
+  };
 
   function resolvePath(path, cb) {
     // Split path into components
@@ -91,22 +99,33 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
         db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
           if (err)  { return cb(fuse.EIO); }
           if (!doc) { return cb(fuse.ENOENT); }
+          if (doc.data) { doc.size = doc.data.length(); }
           cb(0, doc);
         });
       });
     },
 
     open: function (path, flags, cb) {
-      console.log('open(%s, %d)', path, flags);
-      cb(0, 42); // 42 is an fd
+      // This is only good for files that exist right now
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        var fd = openFiles.add({
+          inode: dirent.inode,
+          flags: flags
+        });
+        cb(0, fd);
+      });
     },
 
     read: function (path, fd, buf, len, pos, cb) {
-      console.log('read(%s, %d, %d, %d)', path, fd, len, pos);
-      var str = 'hello world\n'.slice(pos);
-      if (!str) return cb(0);
-      buf.write(str);
-      return cb(str.length);
+      db.inodes.findOne({ _id: openFiles[fd].inode }, function (err, doc) {
+        if (err)  { return cb(fuse.EIO); }
+        if (!doc) { return cb(fuse.ENOENT); }
+        // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
+        var srcbuf = doc.data.read(pos, len);
+        var copied = srcbuf.copy(buf);
+        cb(copied);
+      });
     }
 
   }, function (err) {
