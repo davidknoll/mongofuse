@@ -243,6 +243,13 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     ftruncate: function (path, fd, size, cb) {
       // Truncating the inode by open file descriptor
       itruncate(openFiles[fd].inode, size, cb);
+    },
+
+    mknod: function (path, mode, dev, cb) {
+      // mode includes file type bits, dev is (major << 8) + minor
+      // (and is called rdev in the inode / what gets returned by getattr)
+      console.log("mknod: path " + path + " mode " + mode + " dev " + dev);
+      cb(fuse.EROFS);
     }
 
   }, function (err) {
