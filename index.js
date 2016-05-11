@@ -300,6 +300,29 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
           });
         });
       });
+    },
+
+    unlink: function(path, cb) {
+      // todo: use async for this callback hell
+      // Look up the requested directory entry
+      resolvePath(path, function (err, dirent) {
+        if (err) { return cb(err); }
+        // And remove it, now we know its inode
+        db.directory.remove({ _id: dirent._id }, true, function (err, doc) {
+          if (err) { return cb(fuse.EIO); }
+          // And look up the refcount of that inode
+          db.directory.count({ inode: dirent.inode }, function (err, cnt) {
+            if (err) { return cb(fuse.EIO); }
+            if (cnt) { return cb(0); }
+            // And if it's zero delete the inode
+            // note: is this a race condition?
+            db.inodes.remove({ _id: dirent.inode }, true, function (err, doc) {
+              if (err) { return cb(fuse.EIO); }
+              cb(0);
+            });
+          });
+        });
+      });
     }
 
   }, function (err) {
