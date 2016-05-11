@@ -119,7 +119,8 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
           if (err) { return cb(fuse.EIO); }
           var names = docs.map(function (cdir) { return cdir.name; });
           // According to POSIX we're only meant to return . and .. if the entries actually exist,
-          // but if we don't they won't appear in a directory listing
+          // but if we don't they won't appear in a directory listing.
+          // We don't need to process them further ourselves- the paths we get are already canonicalised.
           names.unshift('..');
           names.unshift('.');
           cb(0, names);
@@ -141,7 +142,7 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     },
 
     open: function (path, flags, cb) {
-      // This is only good for files that exist right now
+      // If this is a new file it will already have been created by mknod
       resolvePath(path, function (err, dirent) {
         if (err) { return cb(err); }
         var fd = openFiles.add({
@@ -175,7 +176,8 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
         var copied = buf.copy(dstbuf, 0, 0, len);
         if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
         doc.data.write(dstbuf, pos);
-        // Update the inode (yes we're storing the data with the inode right now)
+        // Update the inode (yes we're storing the data with the inode right now,
+        // which will break if it causes the inode to exceed the max document size)
         var set = {
           ctime: Date.now(),
           mtime: Date.now(),
@@ -272,8 +274,10 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
       // mode includes file type bits, dev is (major << 8) + minor
       // (and is called rdev in the inode / what gets returned by getattr)
       var pathmod = require('path');
+      // Look up the directory the new file will go in
       resolvePath(pathmod.dirname(path), function (err, dirent) {
         if (err) { return cb(err); }
+        // Create the inode for the new file (we need its _id for the directory)
         var context = fuse.context();
         var newinode = {
           mode:  mode,
@@ -284,6 +288,7 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
         };
         db.inodes.insert(newinode, function (err, doc) {
           if (err) { return cb(fuse.EIO); }
+          // Create the new directory entry
           var newdir = {
             name:   pathmod.basename(path),
             parent: dirent._id,
