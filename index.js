@@ -96,6 +96,18 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     });
   }
 
+  // Gets the attributes of the file with the specified inode ID
+  function igetattr(inode, cb) {
+    // Look up that inode
+    db.inodes.findOne({ _id: inode }, function (err, doc) {
+      if (err)  { return cb(fuse.EIO); }
+      if (!doc) { return cb(fuse.ENOENT); }
+      // Get this live rather than storing it
+      if (doc.data) { doc.size = doc.data.length(); }
+      cb(0, doc);
+    });
+  }
+
   fuse.mount(mountPath, {
 
     readdir: function (path, cb) {
@@ -116,18 +128,16 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     },
 
     getattr: function (path, cb) {
-      // Look up the requested directory entry
+      // Get attributes by path
       resolvePath(path, function (err, dirent) {
         if (err) { return cb(err); }
-        // And look up the inode it refers to
-        db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
-          if (err)  { return cb(fuse.EIO); }
-          if (!doc) { return cb(fuse.ENOENT); }
-          // Get this live rather than storing it
-          if (doc.data) { doc.size = doc.data.length(); }
-          cb(0, doc);
-        });
+        igetattr(dirent.inode, cb);
       });
+    },
+
+    fgetattr: function (path, fd, cb) {
+      // Get attributes by open file descriptor
+      igetattr(openFiles[fd].inode, cb);
     },
 
     open: function (path, flags, cb) {
