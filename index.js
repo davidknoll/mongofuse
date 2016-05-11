@@ -83,9 +83,13 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
       // Truncate to the requested size, by copying into a buffer of that size
       var buf = new Buffer(size).fill(0);
       if (doc.data) { doc.data.read(0, size).copy(buf); }
-      doc.data = new mongojs.Binary(buf, 0);
       // Update the inode
-      db.inodes.update({ _id: inode }, { $set: { data: doc.data } }, function (err, result) {
+      var set = {
+        ctime: Date.now(),
+        mtime: Date.now(),
+        data:  new mongojs.Binary(buf, 0)
+      };
+      db.inodes.update({ _id: inode }, { $set: set }, function (err, result) {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
       });
@@ -162,7 +166,12 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
         if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
         doc.data.write(dstbuf, pos);
         // Update the inode (yes we're storing the data with the inode right now)
-        db.inodes.update({ _id: openFiles[fd].inode }, { $set: { data: doc.data } }, function (err, result) {
+        var set = {
+          ctime: Date.now(),
+          mtime: Date.now(),
+          data:  doc.data
+        };
+        db.inodes.update({ _id: openFiles[fd].inode }, { $set: set }, function (err, result) {
           if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
           cb(copied);
         });
@@ -179,8 +188,11 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
           if (!doc) { return cb(fuse.ENOENT); }
           // In testing, the mode passed in does have the file type bits set,
           // but we probably don't want to go changing them so mask them just in case
-          doc.mode = (doc.mode & 0170000) | (mode & 07777);
-          db.inodes.update({ _id: dirent.inode }, { $set: { mode: doc.mode } }, function (err, result) {
+          var set = {
+            ctime: Date.now(),
+            mode:  (doc.mode & 0170000) | (mode & 07777)
+          };
+          db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
             if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
             cb(0);
           });
@@ -197,7 +209,7 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
           if (err)  { return cb(fuse.EIO); }
           if (!doc) { return cb(fuse.ENOENT); }
           // If we're setting only uid or only gid, the other will be -1
-          var set = {};
+          var set = { ctime: Date.now() };
           if (uid >= 0) { set.uid = uid; }
           if (gid >= 0) { set.gid = gid; }
           db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
@@ -222,7 +234,8 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
           // the changing time(s) getting passed in here were jumping about randomly over 15min or so
           var set = {
             atime: atime.getTime(),
-            mtime: mtime.getTime()
+            mtime: mtime.getTime(),
+            ctime: Date.now()
           };
           db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
             if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
@@ -248,8 +261,30 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     mknod: function (path, mode, dev, cb) {
       // mode includes file type bits, dev is (major << 8) + minor
       // (and is called rdev in the inode / what gets returned by getattr)
-      console.log("mknod: path " + path + " mode " + mode + " dev " + dev);
-      cb(fuse.EROFS);
+      var pathmod = require('path');
+      resolvePath(pathmod.dirname(path), function (err, dirent) {
+        if (err) { return cb(err); }
+        var context = fuse.context();
+        var newinode = {
+          mode:  mode,
+          uid:   context.uid,
+          gid:   context.gid,
+          rdev:  dev,
+          ctime: Date.now()
+        };
+        db.inodes.insert(newinode, function (err, doc) {
+          if (err) { return cb(fuse.EIO); }
+          var newdir = {
+            name:   pathmod.basename(path),
+            parent: dirent._id,
+            inode:  doc._id
+          };
+          db.directory.insert(newdir, function (err, doc) {
+            if (err) { return cb(fuse.EIO); }
+            cb(0);
+          });
+        });
+      });
     }
 
   }, function (err) {
