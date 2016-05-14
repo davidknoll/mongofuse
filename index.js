@@ -108,6 +108,61 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
     });
   }
 
+  function mknod(path, mode, dev, cb) {
+    // mode includes file type bits, dev is (major << 8) + minor
+    // (and is called rdev in the inode / what gets returned by getattr)
+    var pathmod = require('path');
+    // Look up the directory the new file will go in
+    resolvePath(pathmod.dirname(path), function (err, dirent) {
+      if (err) { return cb(err); }
+      // Create the inode for the new file (we need its _id for the directory)
+      var context = fuse.context();
+      var newinode = {
+        mode:  mode,
+        uid:   context.uid,
+        gid:   context.gid,
+        rdev:  dev,
+        ctime: Date.now()
+      };
+      db.inodes.insert(newinode, function (err, doc) {
+        if (err) { return cb(fuse.EIO); }
+        // Create the new directory entry
+        var newdir = {
+          name:   pathmod.basename(path),
+          parent: dirent._id,
+          inode:  doc._id
+        };
+        db.directory.insert(newdir, function (err, doc) {
+          if (err) { return cb(fuse.EIO); }
+          cb(0);
+        });
+      });
+    });
+  }
+
+  function unlink(path, cb) {
+    // todo: use async for this callback hell
+    // Look up the requested directory entry
+    resolvePath(path, function (err, dirent) {
+      if (err) { return cb(err); }
+      // And remove it, now we know its inode
+      db.directory.remove({ _id: dirent._id }, true, function (err, doc) {
+        if (err) { return cb(fuse.EIO); }
+        // And look up the refcount of that inode
+        db.directory.count({ inode: dirent.inode }, function (err, cnt) {
+          if (err) { return cb(fuse.EIO); }
+          if (cnt) { return cb(0); }
+          // And if it's zero delete the inode
+          // note: is this a race condition?
+          db.inodes.remove({ _id: dirent.inode }, true, function (err, doc) {
+            if (err) { return cb(fuse.EIO); }
+            cb(0);
+          });
+        });
+      });
+    });
+  }
+
   fuse.mount(mountPath, {
 
     readdir: function (path, cb) {
@@ -270,57 +325,21 @@ function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
       itruncate(openFiles[fd].inode, size, cb);
     },
 
-    mknod: function (path, mode, dev, cb) {
-      // mode includes file type bits, dev is (major << 8) + minor
-      // (and is called rdev in the inode / what gets returned by getattr)
-      var pathmod = require('path');
-      // Look up the directory the new file will go in
-      resolvePath(pathmod.dirname(path), function (err, dirent) {
-        if (err) { return cb(err); }
-        // Create the inode for the new file (we need its _id for the directory)
-        var context = fuse.context();
-        var newinode = {
-          mode:  mode,
-          uid:   context.uid,
-          gid:   context.gid,
-          rdev:  dev,
-          ctime: Date.now()
-        };
-        db.inodes.insert(newinode, function (err, doc) {
-          if (err) { return cb(fuse.EIO); }
-          // Create the new directory entry
-          var newdir = {
-            name:   pathmod.basename(path),
-            parent: dirent._id,
-            inode:  doc._id
-          };
-          db.directory.insert(newdir, function (err, doc) {
-            if (err) { return cb(fuse.EIO); }
-            cb(0);
-          });
-        });
-      });
+    mknod: mknod,
+
+    unlink: unlink,
+
+    mkdir: function (path, mode, cb) {
+      mknod(path, mode | 0040000, 0, cb);
     },
 
-    unlink: function(path, cb) {
-      // todo: use async for this callback hell
-      // Look up the requested directory entry
+    rmdir: function (path, cb) {
       resolvePath(path, function (err, dirent) {
         if (err) { return cb(err); }
-        // And remove it, now we know its inode
-        db.directory.remove({ _id: dirent._id }, true, function (err, doc) {
+        db.directory.count({ parent: dirent._id }, function (err, cnt) {
           if (err) { return cb(fuse.EIO); }
-          // And look up the refcount of that inode
-          db.directory.count({ inode: dirent.inode }, function (err, cnt) {
-            if (err) { return cb(fuse.EIO); }
-            if (cnt) { return cb(0); }
-            // And if it's zero delete the inode
-            // note: is this a race condition?
-            db.inodes.remove({ _id: dirent.inode }, true, function (err, doc) {
-              if (err) { return cb(fuse.EIO); }
-              cb(0);
-            });
-          });
+          if (cnt) { return cb(fuse.ENOTEMPTY); }
+          unlink(path, cb);
         });
       });
     }
