@@ -21,6 +21,7 @@ module.exports = {
   read:      read,
   readdir:   readdir,
   readlink:  readlink,
+  rename:    rename,
   rmdir:     rmdir,
   symlink:   symlink,
   truncate:  truncate,
@@ -258,6 +259,47 @@ function readlink(path /*:string*/, cb /*:function*/) {
       // Get the target from it
       cb(0, doc.data.value());
     });
+  });
+}
+
+/**
+ * Rename a file
+ *
+ * @param   {String}   src
+ * @param   {String}   dest
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  var pathmod = require('path');
+  var dirent;
+
+  async.waterfall([
+    function (acb) {
+      // Look up the directory entry being renamed
+      mf.resolvePath(src, acb);
+    },
+
+    function (doc, acb) {
+      // Look up the directory the renamed file will go in
+      dirent = doc;
+      mf.resolvePath(pathmod.dirname(dest), acb);
+    },
+
+    function (pdirent, acb) {
+      // Set the new name and parent
+      var set = {
+        name:   pathmod.basename(dest),
+        parent: pdirent._id
+      };
+      mf.db.directory.update({ _id: dirent._id }, { $set: set }, acb);
+    }
+
+  ], function (err, result) {
+    // FUSE errors (from resolvePath), MongoDB errors, success
+    if (err < 0) { return cb(err); }
+    if (err)     { return cb(fuse.EIO); }
+    cb(0);
   });
 }
 
