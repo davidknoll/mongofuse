@@ -1,10 +1,23 @@
-module.exports = mf = {
-  db:          {}, // Filled in by main()
+/**
+ * A FUSE filesystem, backed by MongoDB and written in Node.js.
+ * Mostly an exercise for me to learn MongoDB and Node.js.
+ *
+ * @author  David Knoll <david@davidknoll.me.uk>
+ * @license MIT
+ * @file
+ * @flow
+ */
+
+// Exports
+module.exports = {
+  // MongoJS database object
+  db:          ({} /*:Object*/), // Filled in by main()
   igetattr:    igetattr,
   itruncate:   itruncate,
+  // Manages open file descriptors
   openFiles:   {
     next: 10,
-    add:  function (data) {
+    add:  function (data /*:{inode:string,flags:number}*/) {
       var fd   = this.next++;
       this[fd] = data;
       return fd;
@@ -12,21 +25,29 @@ module.exports = mf = {
   },
   resolvePath: resolvePath
 };
+var mf = module.exports;
 
+// Imports
 var async   = require('async');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
 
-// Takes a canonical path, relative to the root of our fs but with leading /,
-// runs callback with its directory entry
-function resolvePath(path, cb) {
+/**
+ * Takes a canonical path, relative to the root of our fs but with leading /,
+ * runs callback with its directory entry
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function resolvePath(path /*:string*/, cb /*:function*/) {
   // Split path into components
   // Note that splitting "/" on "/" gives two empty-string components, we don't want that
   if (path === "/") { path = ""; }
   var names = path.split("/");
 
   // Create a series of steps to look up each component of the path in turn
-  var tasks = names.map(function (name) {
+  var tasks = names.map(function (name /*:string*/) {
     return function (pdoc, cb) {
       // Look up one component of the path in the directory, return its entry
       // The root is represented with a null parent and an empty-string name
@@ -43,8 +64,15 @@ function resolvePath(path, cb) {
   async.waterfall(tasks, cb);
 }
 
-// Truncates the file with the specified inode ID to the specified size
-function itruncate(inode, size, cb) {
+/**
+ * Truncates the file with the specified inode ID to the specified size
+ *
+ * @param   {String}   inode
+ * @param   {Number}   size
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
   // Look up that inode
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -65,8 +93,14 @@ function itruncate(inode, size, cb) {
   });
 }
 
-// Gets the attributes of the file with the specified inode ID
-function igetattr(inode, cb) {
+/**
+ * Gets the attributes of the file with the specified inode ID
+ *
+ * @param   {String}   inode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function igetattr(inode /*:string*/, cb /*:function*/) {
   // Look up that inode
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }

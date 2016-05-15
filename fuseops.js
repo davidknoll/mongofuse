@@ -1,3 +1,14 @@
+/**
+ * A FUSE filesystem, backed by MongoDB and written in Node.js.
+ * Mostly an exercise for me to learn MongoDB and Node.js.
+ *
+ * @author  David Knoll <david@davidknoll.me.uk>
+ * @license MIT
+ * @file
+ * @flow
+ */
+
+// Exports
 module.exports = {
   chmod:     chmod,
   chown:     chown,
@@ -17,11 +28,20 @@ module.exports = {
   write:     write
 };
 
+// Imports
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
 var mf      = require('./extra.js');
 
-function chmod(path, mode, cb) {
+/**
+ * Change file mode
+ *
+ * @param   {String}   path
+ * @param   {Number}   mode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -42,8 +62,17 @@ function chmod(path, mode, cb) {
     });
   });
 }
-    
-function chown(path, uid, gid, cb) {
+
+/**
+ * Change file owner/group
+ *
+ * @param   {String}   path
+ * @param   {Number}   uid
+ * @param   {Number}   gid
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:function*/) {
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -52,7 +81,7 @@ function chown(path, uid, gid, cb) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       // If we're setting only uid or only gid, the other will be -1
-      var set = { ctime: Date.now() };
+      var set /*:{uid?:number,gid?:number}*/ = { ctime: Date.now() };
       if (uid >= 0) { set.uid = uid; }
       if (gid >= 0) { set.gid = gid; }
       mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
@@ -63,29 +92,67 @@ function chown(path, uid, gid, cb) {
   });
 }
 
-function fgetattr(path, fd, cb) {
-  // Get attributes by open file descriptor
+/**
+ * Get file attributes, by open file descriptor
+ *
+ * @param   {String}   path
+ * @param   {Number}   fd
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function fgetattr(path /*:string*/, fd /*:number*/, cb /*:function*/) {
   mf.igetattr(mf.openFiles[fd].inode, cb);
 }
 
-function ftruncate(path, fd, size, cb) {
-  // Truncating the inode by open file descriptor
+/**
+ * Truncate file, by open file descriptor
+ *
+ * @param   {String}   path
+ * @param   {Number}   fd
+ * @param   {Number}   size
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function ftruncate(path /*:string*/, fd /*:number*/, size /*:number*/, cb /*:function*/) {
   mf.itruncate(mf.openFiles[fd].inode, size, cb);
 }
 
-function getattr(path, cb) {
-  // Get attributes by path
+/**
+ * Get file attributes, by path
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function getattr(path /*:string*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     mf.igetattr(dirent.inode, cb);
   });
 }
 
-function mkdir(path, mode, cb) {
+/**
+ * Create directory
+ *
+ * @param   {String}   path
+ * @param   {Number}   mode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mknod(path, mode | 0040000, 0, cb);
 }
 
-function mknod(path, mode, dev, cb) {
+/**
+ * Create file node
+ *
+ * @param   {String}   path
+ * @param   {Number}   mode
+ * @param   {Number}   dev
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function mknod(path /*:string*/, mode /*:number*/, dev /*:number*/, cb /*:function*/) {
   // mode includes file type bits, dev is (major << 8) + minor
   // (and is called rdev in the inode / what gets returned by getattr)
   var pathmod = require('path');
@@ -117,10 +184,19 @@ function mknod(path, mode, dev, cb) {
   });
 }
 
-function open(path, flags, cb) {
+/**
+ * Open file
+ *
+ * @param   {String}   path
+ * @param   {Number}   flags
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
   // If this is a new file it will already have been created by mknod
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
+    // Add it to the list of open file descriptors
     var fd = mf.openFiles.add({
       inode: dirent.inode,
       flags: flags
@@ -129,7 +205,18 @@ function open(path, flags, cb) {
   });
 }
 
-function read(path, fd, buf, len, pos, cb) {
+/**
+ * Read data from a file
+ *
+ * @param   {String}   path
+ * @param   {Number}   fd
+ * @param   {Buffer}   buf
+ * @param   {Number}   len
+ * @param   {Number}   pos
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -142,7 +229,14 @@ function read(path, fd, buf, len, pos, cb) {
   });
 }
 
-function readdir(path, cb) {
+/**
+ * List entries in a directory
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function readdir(path /*:string*/, cb /*:function*/) {
   // Look up the requested directory itself
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -160,9 +254,18 @@ function readdir(path, cb) {
   });
 }
 
-function rmdir(path, cb) {
+/**
+ * Remove empty directory (if empty, else return error)
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function rmdir(path /*:string*/, cb /*:function*/) {
+  // Look up the directory being deleted
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
+    // See if it has any children, and if not, delete it
     mf.db.directory.count({ parent: dirent._id }, function (err, cnt) {
       if (err) { return cb(fuse.EIO); }
       if (cnt) { return cb(fuse.ENOTEMPTY); }
@@ -171,21 +274,44 @@ function rmdir(path, cb) {
   });
 }
 
-function symlink(src, dest, cb) {
+/**
+ * Create a symbolic link
+ *
+ * @param   {String}   src
+ * @param   {String}   dest
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  // Not yet implemented
   console.log("symlink src " + src + " dest " + dest);
   //mknod(dest, 0120777, 0, cb);
   cb(fuse.ENFILE);
 }
 
-function truncate(path, size, cb) {
-  // Truncating the inode by path
+/**
+ * Truncate file, by path
+ *
+ * @param   {String}   path
+ * @param   {Number}   size
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     mf.itruncate(dirent.inode, size, cb);
   });
 }
 
-function unlink(path, cb) {
+/**
+ * Delete file
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function unlink(path /*:string*/, cb /*:function*/) {
   // todo: use async for this callback hell
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
@@ -208,7 +334,16 @@ function unlink(path, cb) {
   });
 }
 
-function utimens(path, atime, mtime, cb) {
+/**
+ * Update file access and modify time
+ *
+ * @param   {String}   path
+ * @param   {Date}     atime
+ * @param   {Date}     mtime
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:function*/) {
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -233,13 +368,25 @@ function utimens(path, atime, mtime, cb) {
   });
 }
 
-function write(path, fd, buf, len, pos, cb) {
+/**
+ * Write data to a file
+ *
+ * @param   {String}   path
+ * @param   {Number}   fd
+ * @param   {Buffer}   buf
+ * @param   {Number}   len
+ * @param   {Number}   pos
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
     // Make sure we have a buffer of exactly the size of the write data
-    var dstbuf = new Buffer(len).fill(0);
+    var dstbuf = new Buffer(len);
+    dstbuf.fill(0);
     var copied = buf.copy(dstbuf, 0, 0, len);
     if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
     doc.data.write(dstbuf, pos);
