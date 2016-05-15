@@ -20,6 +20,7 @@ module.exports = {
   open:      open,
   read:      read,
   readdir:   readdir,
+  readlink:  readlink,
   rmdir:     rmdir,
   symlink:   symlink,
   truncate:  truncate,
@@ -140,7 +141,8 @@ function getattr(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
-  mknod(path, mode | 0040000, 0, cb);
+  // Set file type bits for a directory, as they aren't supplied here
+  mknod(path, (mode & 07777) | 0040000, 0, cb);
 }
 
 /**
@@ -155,33 +157,16 @@ function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
 function mknod(path /*:string*/, mode /*:number*/, dev /*:number*/, cb /*:function*/) {
   // mode includes file type bits, dev is (major << 8) + minor
   // (and is called rdev in the inode / what gets returned by getattr)
-  var pathmod = require('path');
-  // Look up the directory the new file will go in
-  mf.resolvePath(pathmod.dirname(path), function (err, dirent) {
-    if (err) { return cb(err); }
-    // Create the inode for the new file (we need its _id for the directory)
-    var context = fuse.context();
-    var newinode = {
-      mode:  mode,
-      uid:   context.uid,
-      gid:   context.gid,
-      rdev:  dev,
-      ctime: Date.now()
-    };
-    mf.db.inodes.insert(newinode, function (err, doc) {
-      if (err) { return cb(fuse.EIO); }
-      // Create the new directory entry
-      var newdir = {
-        name:   pathmod.basename(path),
-        parent: dirent._id,
-        inode:  doc._id
-      };
-      mf.db.directory.insert(newdir, function (err, doc) {
-        if (err) { return cb(fuse.EIO); }
-        cb(0);
-      });
-    });
-  });
+  var context = fuse.context();
+  mf.doMknod(path, {
+    mode:  mode,
+    uid:   context.uid,
+    gid:   context.gid,
+    rdev:  dev,
+    ctime: Date.now(),
+    mtime: Date.now(),
+    atime: Date.now()
+  }, cb);
 }
 
 /**
@@ -255,6 +240,27 @@ function readdir(path /*:string*/, cb /*:function*/) {
 }
 
 /**
+ * Resolve a symbolic link
+ *
+ * @param   {String}   path
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function readlink(path /*:string*/, cb /*:function*/) {
+  // Look up the requested directory entry
+  mf.resolvePath(path, function (err, dirent) {
+    if (err) { return cb(err); }
+    // And look up the inode it refers to
+    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+      if (err)  { return cb(fuse.EIO); }
+      if (!doc) { return cb(fuse.ENOENT); }
+      // Get the target from it
+      cb(0, doc.data.value());
+    });
+  });
+}
+
+/**
  * Remove empty directory (if empty, else return error)
  *
  * @param   {String}   path
@@ -283,10 +289,17 @@ function rmdir(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
-  // Not yet implemented
-  console.log("symlink src " + src + " dest " + dest);
-  //mknod(dest, 0120777, 0, cb);
-  cb(fuse.ENFILE);
+  // mknod with mode set for a symlink, the target being stored as if file data
+  var context = fuse.context();
+  mf.doMknod(dest, {
+    mode:  0120777,
+    uid:   context.uid,
+    gid:   context.gid,
+    ctime: Date.now(),
+    mtime: Date.now(),
+    atime: Date.now(),
+    data:  new mongojs.Binary(new Buffer(src), 0)
+  }, cb);
 }
 
 /**

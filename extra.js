@@ -12,6 +12,7 @@
 module.exports = {
   // MongoJS database object
   db:          ({} /*:Object*/), // Filled in by main()
+  doMknod:     doMknod,
   igetattr:    igetattr,
   itruncate:   itruncate,
   // Manages open file descriptors
@@ -31,6 +32,36 @@ var mf = module.exports;
 var async   = require('async');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
+
+/**
+ * Create an inode and a corresponding directory entry from the provided data
+ *
+ * @param   {String}   path
+ * @param   {Object}   inode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function doMknod(path /*:string*/, inode /*:Object*/, cb /*:function*/) {
+  // Look up the directory the new file will go in
+  var pathmod = require('path');
+  mf.resolvePath(pathmod.dirname(path), function (err, dirent) {
+    if (err) { return cb(err); }
+    // Create the inode for the new file (we need its _id for the directory)
+    mf.db.inodes.insert(inode, function (err, doc) {
+      if (err) { return cb(fuse.EIO); }
+      // Create the new directory entry
+      var newdir = {
+        name:   pathmod.basename(path),
+        parent: dirent._id,
+        inode:  doc._id
+      };
+      mf.db.directory.insert(newdir, function (err, doc) {
+        if (err) { return cb(fuse.EIO); }
+        cb(0);
+      });
+    });
+  });
+}
 
 /**
  * Takes a canonical path, relative to the root of our fs but with leading /,
