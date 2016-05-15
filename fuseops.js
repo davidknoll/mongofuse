@@ -30,6 +30,7 @@ module.exports = {
 };
 
 // Imports
+var async   = require('async');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
 var mf      = require('./extra.js');
@@ -325,25 +326,32 @@ function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function unlink(path /*:string*/, cb /*:function*/) {
-  // todo: use async for this callback hell
-  // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
-    if (err) { return cb(err); }
-    // And remove it, now we know its inode
-    mf.db.directory.remove({ _id: dirent._id }, true, function (err, doc) {
-      if (err) { return cb(fuse.EIO); }
+  var dirent;
+  async.waterfall([
+    function (acb) {
+      // Look up the requested directory entry
+      mf.resolvePath(path, acb);
+    },
+    function (doc, acb) {
+      // And remove it, now we know its inode
+      dirent = doc;
+      mf.db.directory.remove({ _id: dirent._id }, true, acb);
+    },
+    function (doc, acb) {
       // And look up the refcount of that inode
-      mf.db.directory.count({ inode: dirent.inode }, function (err, cnt) {
-        if (err) { return cb(fuse.EIO); }
-        if (cnt) { return cb(0); }
-        // And if it's zero delete the inode
-        // note: is this a race condition?
-        mf.db.inodes.remove({ _id: dirent.inode }, true, function (err, doc) {
-          if (err) { return cb(fuse.EIO); }
-          cb(0);
-        });
-      });
-    });
+      mf.db.directory.count({ inode: dirent.inode }, acb);
+    },
+    function (cnt, acb) {
+      // And if it's zero delete the inode
+      // note: is this a race condition?
+      if (cnt) { return acb(0); }
+      mf.db.inodes.remove({ _id: dirent.inode }, true, acb);
+    }
+  ], function (err, result) {
+    // FUSE errors (from resolvePath), MongoDB errors, success
+    if (err < 0) { return cb(err); }
+    if (err)     { return cb(fuse.EIO); }
+    cb(0);
   });
 }
 
