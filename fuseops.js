@@ -21,6 +21,7 @@ module.exports = {
   read:      read,
   readdir:   readdir,
   readlink:  readlink,
+  release:   release,
   rename:    rename,
   rmdir:     rmdir,
   symlink:   symlink,
@@ -104,6 +105,7 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
  * @returns {undefined}
  */
 function fgetattr(path /*:string*/, fd /*:number*/, cb /*:function*/) {
+  if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   mf.igetattr(mf.openFiles[fd].inode, cb);
 }
 
@@ -117,6 +119,7 @@ function fgetattr(path /*:string*/, fd /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function ftruncate(path /*:string*/, fd /*:number*/, size /*:number*/, cb /*:function*/) {
+  if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   mf.itruncate(mf.openFiles[fd].inode, size, cb);
 }
 
@@ -204,6 +207,7 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -260,6 +264,20 @@ function readlink(path /*:string*/, cb /*:function*/) {
       cb(0, doc.data.value());
     });
   });
+}
+
+/**
+ * Close a file descriptor
+ *
+ * @param   {String}   path
+ * @param   {Number}   fd
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
+  if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
+  delete mf.openFiles[fd];
+  cb(0);
 }
 
 /**
@@ -384,9 +402,14 @@ function unlink(path /*:string*/, cb /*:function*/) {
       mf.db.directory.count({ inode: dirent.inode }, acb);
     },
     function (cnt, acb) {
-      // And if it's zero delete the inode
-      // note: is this a race condition?
+      // Were there any other references?
+      // note: is this a race condition (TOCTOU)?
       if (cnt) { return acb(0); }
+      // And check the inode isn't open
+      for (var fd in mf.openFiles) {
+        if (mf.openFiles[fd].inode === dirent.inode) { return acb(0); }
+      }
+      // If neither, remove the inode
       mf.db.inodes.remove({ _id: dirent.inode }, true, acb);
     }
   ], function (err, result) {
@@ -443,6 +466,7 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
  * @returns {undefined}
  */
 function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
