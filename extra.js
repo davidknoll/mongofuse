@@ -14,6 +14,7 @@ module.exports = {
   db:          ({} /*:Object*/), // Filled in by main()
   doMknod:     doMknod,
   igetattr:    igetattr,
+  iremove:     iremove,
   itruncate:   itruncate,
   // Manages open file descriptors
   openFiles:   {
@@ -139,5 +140,33 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
     // Get this live rather than storing it
     if (doc.data) { doc.size = doc.data.length(); }
     cb(0, doc);
+  });
+}
+
+/**
+ * Given an inode ID, remove it if it is not open and has no links.
+ *
+ * @param   {String}   inode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function iremove(inode /*:string*/, cb /*:function*/) {
+  // Is it open?
+  for (var fd in mf.openFiles) {
+    if (mf.openFiles[fd].inode === inode) { return cb(0); }
+  }
+
+  // Look up refcount
+  mf.db.directory.count({ inode: inode }, function (err, cnt) {
+    // Does it have any links?
+    // note: is this a race condition (TOCTOU)?
+    if (err) { return cb(fuse.EIO); }
+    if (cnt) { return cb(0); }
+
+    // If not, remove the inode
+    mf.db.inodes.remove({ _id: inode }, true, function (err, res) {
+      if (err) { return cb(fuse.EIO); }
+      cb(0);
+    });
   });
 }

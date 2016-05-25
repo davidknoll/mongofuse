@@ -275,9 +275,13 @@ function readlink(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
+  // If an open file, close it
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
+  var inode = mf.openFiles[fd].inode;
   delete mf.openFiles[fd];
-  cb(0);
+
+  // Remove the inode if it has no more references
+  mf.iremove(inode, cb);
 }
 
 /**
@@ -392,27 +396,19 @@ function unlink(path /*:string*/, cb /*:function*/) {
       // Look up the requested directory entry
       mf.resolvePath(path, acb);
     },
+
     function (doc, acb) {
       // And remove it, now we know its inode
       dirent = doc;
       mf.db.directory.remove({ _id: dirent._id }, true, acb);
     },
+
     function (doc, acb) {
-      // And look up the refcount of that inode
-      mf.db.directory.count({ inode: dirent.inode }, acb);
-    },
-    function (cnt, acb) {
-      // Were there any other references?
-      // note: is this a race condition (TOCTOU)?
-      if (cnt) { return acb(0); }
-      // And check the inode isn't open
-      for (var fd in mf.openFiles) {
-        if (mf.openFiles[fd].inode === dirent.inode) { return acb(0); }
-      }
-      // If neither, remove the inode
-      mf.db.inodes.remove({ _id: dirent.inode }, true, acb);
+      // Remove the inode if safe
+      mf.iremove(dirent.inode, acb);
     }
-  ], function (err, result) {
+
+  ], function (err) {
     // FUSE errors (from resolvePath), MongoDB errors, success
     if (err < 0) { return cb(err); }
     if (err)     { return cb(fuse.EIO); }
