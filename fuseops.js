@@ -15,6 +15,7 @@ module.exports = {
   fgetattr:  fgetattr,
   ftruncate: ftruncate,
   getattr:   getattr,
+  init:      init,
   mkdir:     mkdir,
   mknod:     mknod,
   open:      open,
@@ -134,6 +135,43 @@ function getattr(path /*:string*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     mf.igetattr(dirent.inode, cb);
+  });
+}
+
+/**
+ * Called on filesystem init, sets up a root directory if it's a new instance
+ *
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function init(cb /*:function*/) {
+  // Does the root directory exist?
+  mf.resolvePath("/", function (err, dirent) {
+    if (err === fuse.ENOENT) {
+      console.log("Creating root directory");
+      // Create the root directory's inode, using details of invoking user
+      mf.db.inodes.insert({
+        mode:  0040777 & ~process.umask(),
+        uid:   process.geteuid(),
+        gid:   process.getegid(),
+        ctime: Date.now(),
+        mtime: Date.now(),
+        atime: Date.now()
+
+      }, function (err, doc) {
+        if (err) { return cb(fuse.EIO); }
+        // Create the root directory entry, identified by null parent and empty name
+        mf.db.directory.insert({
+          name:   "",
+          parent: null,
+          inode:  doc._id
+
+        }, function (err, doc) {
+          if (err) { return cb(fuse.EIO); }
+          cb(0);
+        });
+      });
+    } else { cb(err); }
   });
 }
 
