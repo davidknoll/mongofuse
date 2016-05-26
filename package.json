@@ -1,6 +1,6 @@
 {
   "name": "mongofuse",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A FUSE filesystem, backed by MongoDB and written in Node.js. Mostly an exercise for me to learn MongoDB and Node.js.",
   "main": "index.js",
   "bin": {
