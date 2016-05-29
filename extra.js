@@ -112,6 +112,9 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
+    // Permissions?
+    var access = mf.chkaccess(doc, 0x2);
+    if (access) { return cb(access); }
     // Note MongoDB's max document size.
     // This leaves a bit of space for the rest of the inode data.
     if (size > 16000000) { return cb(fuse.EFBIG); }
