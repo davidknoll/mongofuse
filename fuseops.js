@@ -10,6 +10,7 @@
 
 // Exports
 module.exports = {
+  access:    access,
   chmod:     chmod,
   chown:     chown,
   fgetattr:  fgetattr,
@@ -37,6 +38,51 @@ var async   = require('async');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
 var mf      = require('./extra.js');
+
+/**
+ * Check permissions before accessing a file
+ *
+ * @param   {String}   path
+ * @param   {Number}   mode
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
+  if (mode < 0 || mode > 7) { return cb(fuse.EINVAL); }
+  var context = fuse.context();
+  mf.resolvePath(path, function (err, dirent) {
+    if (err) { return cb(err); }
+    mf.igetattr(dirent.inode, function (err, inode) {
+
+      if (err) {
+        // Error reading the inode
+        return cb(err);
+      } else if (!mode) {
+        // If mode is 0, we're just testing existence, and we've proved that
+        return cb(0);
+      } else if (!context.uid) {
+        // User requesting access is root
+        return cb(0);
+
+      } else if (context.uid === inode.uid) {
+        // User requesting access is this file's owner
+        var ubits  = (inode.mode >> 6) & 7;
+        var umatch = ((ubits & mode) === mode);
+        return cb(umatch ? 0 : fuse.EACCES);
+      } else if (mf.useringroup(context.uid, inode.gid)) {
+        // User requesting access is in this file's group
+        var gbits  = (inode.mode >> 3) & 7;
+        var gmatch = ((gbits & mode) === mode);
+        return cb(gmatch ? 0 : fuse.EACCES);
+      } else {
+        // Neither user nor group match, check world permissions
+        var obits  = (inode.mode >> 0) & 7;
+        var omatch = ((obits & mode) === mode);
+        return cb(omatch ? 0 : fuse.EACCES);
+      }
+    });
+  });
+}
 
 /**
  * Change file mode

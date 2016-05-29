@@ -25,7 +25,8 @@ module.exports = {
       return fd;
     }
   },
-  resolvePath: resolvePath
+  resolvePath: resolvePath,
+  useringroup: useringroup
 };
 var mf = module.exports;
 
@@ -33,6 +34,7 @@ var mf = module.exports;
 var async   = require('async');
 var fuse    = require('fuse-bindings');
 var mongojs = require('mongojs');
+var posix   = require('posix');
 
 /**
  * Create an inode and a corresponding directory entry from the provided data
@@ -169,4 +171,19 @@ function iremove(inode /*:string*/, cb /*:function*/) {
       cb(0);
     });
   });
+}
+
+/**
+ * Check whether the specified user is in the specified group
+ *
+ * @param   {Number} uid
+ * @param   {Number} gid
+ * @returns {Boolean}
+ */
+function useringroup(uid /*:number*/, gid /*:number*/) {
+  var pwnam = posix.getpwnam(uid);
+  var grnam = posix.getgrnam(gid);
+  // ie. was anything returned for the above?
+  if (!pwnam.name || !grnam.name) { return false; }
+  return grnam.members.indexOf(pwnam.name) !== -1;
 }
