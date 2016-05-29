@@ -265,12 +265,23 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
   // If this is a new file it will already have been created by mknod
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
-    // Add it to the list of open file descriptors
-    var fd = mf.openFiles.add({
-      inode: dirent.inode,
-      flags: flags
+    // Look up the inode...
+    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+      if (err)  { return cb(fuse.EIO); }
+      if (!doc) { return cb(fuse.ENOENT); }
+
+      // ...in order to check permissions
+      var modemap = [ 4, 2, 6, -1 ];
+      var access  = mf.chkaccess(doc, modemap[flags & 0x3]);
+      if (access) { return cb(access); }
+
+      // Add it to the list of open file descriptors
+      var fd = mf.openFiles.add({
+        inode: dirent.inode,
+        flags: flags
+      });
+      cb(0, fd);
     });
-    cb(0, fd);
   });
 }
 
