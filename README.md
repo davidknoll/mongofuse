@@ -25,10 +25,16 @@ inserting stuff into MongoDB first!
 * mknod (special files can be created, but can't be used with nodev in effect, see below)
 * mtime/ctime update on file write
 * symlinks
+* File permissions enforced on open, truncate, ftruncate.
+access function is implemented.
+You can't read from a fd opened with O_WRONLY and vice versa.
+You can't chmod/chown/chgrp when you shouldn't be allowed to.
 
 ### Things that don't work / aren't present (yet)
-* Permissions aren't enforced. You can write to a file with mode 000.
-You can't now, however, chmod/chown/chgrp when you shouldn't be allowed.
+* Directory permissions are partially but not fully enforced.
+There are quirks like being able to traverse or list a directory when you shouldn't,
+but not permitted to find or cd into it due to the access function.
+You can create and delete files in them too, as it's the directory's permissions that matter for that.
 * atimes aren't updated automatically. Nor are directory mtimes/ctimes when a file is created.
 * No way of specifying mount options on the command line (seems to default to nosuid, nodev)
 * hardlinks
@@ -37,3 +43,6 @@ You can't now, however, chmod/chown/chgrp when you shouldn't be allowed.
 I now check for this and return EFBIG from ftruncate/truncate/write.
 The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).
 * I don't know if it works on OSes other than Linux, I haven't tried.
+* Performance is probably pants, due to things like lack of caching,
+storing the data itself within the inode document, and not explicitly
+storing the filesize but counting the length of the data in getattr.
