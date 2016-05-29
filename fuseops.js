@@ -63,6 +63,7 @@ function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
 
 /**
  * Change file mode
+ * Should not be able to do this unless you are root or the existing owner
  *
  * @param   {String}   path
  * @param   {Number}   mode
@@ -77,12 +78,18 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
     mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
+
       // In testing, the mode passed in does have the file type bits set,
       // but we probably don't want to go changing them so mask them just in case
       var set = {
         ctime: Date.now(),
         mode:  (doc.mode & 0170000) | (mode & 07777)
       };
+      // Is this allowed?
+      var context = fuse.context();
+      if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
+
+      // Save changes
       mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
@@ -93,6 +100,9 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
 
 /**
  * Change file owner/group
+ * Should not be able to do this unless you are root or the existing owner
+ * Should not be able to chown to a user other than yourself, unless you are root
+ * Should not be able to chgrp to a group you are not a member of, unless you are root
  *
  * @param   {String}   path
  * @param   {Number}   uid
@@ -108,10 +118,18 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
     mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
+
       // If we're setting only uid or only gid, the other will be -1
       var set /*:{uid?:number,gid?:number}*/ = { ctime: Date.now() };
       if (uid >= 0) { set.uid = uid; }
       if (gid >= 0) { set.gid = gid; }
+      // Is this allowed?
+      var context = fuse.context();
+      if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
+      if (context.uid !== 0 && context.uid !== uid)     { return cb(fuse.EPERM); }
+      if (context.uid !== 0 && !mf.useringroup(context.uid, gid)) { return cb(fuse.EPERM); }
+
+      // Save changes
       mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
