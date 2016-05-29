@@ -297,7 +297,10 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  // Is it open for reading?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
+  if (mf.openFiles[fd].flags & 0x3 === 0x1) { return cb(fuse.EBADF); }
+
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -552,7 +555,10 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
  * @returns {undefined}
  */
 function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  // Is it open for writing?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
+  if (mf.openFiles[fd].flags & 0x3 === 0x0) { return cb(fuse.EBADF); }
+
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
