@@ -10,6 +10,7 @@
 
 // Exports
 module.exports = {
+  chkaccess:   chkaccess,
   // MongoJS database object
   db:          ({} /*:Object*/), // Filled in by main()
   doMknod:     doMknod,
@@ -186,4 +187,41 @@ function useringroup(uid /*:number*/, gid /*:number*/) {
   // ie. was anything returned for the above?
   if (!pwnam.name || !grnam.name) { return false; }
   return grnam.members.indexOf(pwnam.name) !== -1;
+}
+
+/**
+ * Check a requested permission (and the requesting user) against an inode
+ *
+ * @param   {Object} inode
+ * @param   {Number} mode
+ * @returns {Number}
+ */
+function chkaccess(inode /*:{mode:number,uid:number,gid:number}*/, mode /*:number*/) {
+  var context = fuse.context();
+  if (mode < 0 || mode > 7) {
+    // Invalid access mode
+    return fuse.EINVAL;
+  } else if (!mode) {
+    // If mode is 0, we're just testing existence, and we've proved that
+    return 0;
+  } else if (!context.uid) {
+    // User requesting access is root
+    return 0;
+
+  } else if (context.uid === inode.uid) {
+    // User requesting access is this file's owner
+    var ubits  = (inode.mode >> 6) & 7;
+    var umatch = ((ubits & mode) === mode);
+    return umatch ? 0 : fuse.EACCES;
+  } else if (mf.useringroup(context.uid, inode.gid)) {
+    // User requesting access is in this file's group
+    var gbits  = (inode.mode >> 3) & 7;
+    var gmatch = ((gbits & mode) === mode);
+    return gmatch ? 0 : fuse.EACCES;
+  } else {
+    // Neither user nor group match, check world permissions
+    var obits  = (inode.mode >> 0) & 7;
+    var omatch = ((obits & mode) === mode);
+    return omatch ? 0 : fuse.EACCES;
+  }
 }

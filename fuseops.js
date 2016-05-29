@@ -48,38 +48,15 @@ var mf      = require('./extra.js');
  * @returns {undefined}
  */
 function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
-  if (mode < 0 || mode > 7) { return cb(fuse.EINVAL); }
-  var context = fuse.context();
+  // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
-    mf.igetattr(dirent.inode, function (err, inode) {
-
-      if (err) {
-        // Error reading the inode
-        return cb(err);
-      } else if (!mode) {
-        // If mode is 0, we're just testing existence, and we've proved that
-        return cb(0);
-      } else if (!context.uid) {
-        // User requesting access is root
-        return cb(0);
-
-      } else if (context.uid === inode.uid) {
-        // User requesting access is this file's owner
-        var ubits  = (inode.mode >> 6) & 7;
-        var umatch = ((ubits & mode) === mode);
-        return cb(umatch ? 0 : fuse.EACCES);
-      } else if (mf.useringroup(context.uid, inode.gid)) {
-        // User requesting access is in this file's group
-        var gbits  = (inode.mode >> 3) & 7;
-        var gmatch = ((gbits & mode) === mode);
-        return cb(gmatch ? 0 : fuse.EACCES);
-      } else {
-        // Neither user nor group match, check world permissions
-        var obits  = (inode.mode >> 0) & 7;
-        var omatch = ((obits & mode) === mode);
-        return cb(omatch ? 0 : fuse.EACCES);
-      }
+    // And look up the inode it refers to
+    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+      if (err)  { return cb(fuse.EIO); }
+      if (!doc) { return cb(fuse.ENOENT); }
+      // Check the requested permission against the inode
+      cb(mf.chkaccess(doc, mode));
     });
   });
 }
