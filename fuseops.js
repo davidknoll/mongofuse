@@ -126,8 +126,8 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
       // Is this allowed?
       var context = fuse.context();
       if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
-      if (context.uid !== 0 && context.uid !== uid)     { return cb(fuse.EPERM); }
-      if (context.uid !== 0 && !mf.useringroup(context.uid, gid)) { return cb(fuse.EPERM); }
+      if (context.uid !== 0 && uid !== -1 && context.uid !== uid) { return cb(fuse.EPERM); }
+      if (context.uid !== 0 && gid !== -1 && !mf.useringroup(context.uid, gid)) { return cb(fuse.EPERM); }
 
       // Save changes
       mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
@@ -546,19 +546,23 @@ function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
+
     // Make sure we have a buffer of exactly the size of the write data
     var dstbuf = new Buffer(len);
     dstbuf.fill(0);
     var copied = buf.copy(dstbuf, 0, 0, len);
     if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
     doc.data.write(dstbuf, pos);
-    // Update the inode (yes we're storing the data with the inode right now,
-    // which will break if it causes the inode to exceed the max document size)
+    // Note MongoDB's max document size.
+    // This leaves a bit of space for the rest of the inode data.
+    if (doc.data.length() > 16000000) { return cb(fuse.EFBIG); }
+    // Update the inode (yes we're storing the data with the inode right now)
     var set = {
       ctime: Date.now(),
       mtime: Date.now(),
       data:  doc.data
     };
+
     mf.db.inodes.update({ _id: mf.openFiles[fd].inode }, { $set: set }, function (err, result) {
       if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
       cb(copied);

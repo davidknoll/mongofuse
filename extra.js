@@ -112,6 +112,10 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
+    // Note MongoDB's max document size.
+    // This leaves a bit of space for the rest of the inode data.
+    if (size > 16000000) { return cb(fuse.EFBIG); }
+
     // Truncate to the requested size, by copying into a buffer of that size
     var buf = new Buffer(size).fill(0);
     if (doc.data) { doc.data.read(0, size).copy(buf); }
@@ -121,6 +125,7 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
       mtime: Date.now(),
       data:  new mongojs.Binary(buf, 0)
     };
+
     mf.db.inodes.update({ _id: inode }, { $set: set }, function (err, result) {
       if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
       cb(0);

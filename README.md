@@ -28,13 +28,12 @@ inserting stuff into MongoDB first!
 
 ### Things that don't work / aren't present (yet)
 * Permissions aren't enforced. You can write to a file with mode 000.
+You can't now, however, chmod/chown/chgrp when you shouldn't be allowed.
 * atimes aren't updated automatically. Nor are directory mtimes/ctimes when a file is created.
 * No way of specifying mount options on the command line (seems to default to nosuid, nodev)
 * hardlinks
 * extended attributes
-
-### Licensing
-Copyright (c) 2016 David Knoll.
-Provided under the MIT license, which you should find in the LICENSE file.
-Initially based on the example in the `fuse-bindings` package (also MIT
-licensed), but most of that is now gone.
+* Files larger than just under 16MB, due to the maximum document size in MongoDB.
+I now check for this and return EFBIG from ftruncate/truncate/write.
+The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).
+* I don't know if it works on OSes other than Linux, I haven't tried.
