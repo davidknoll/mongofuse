@@ -20,10 +20,12 @@ module.exports = {
   mkdir:     mkdir,
   mknod:     mknod,
   open:      open,
+  opendir:   open,
   read:      read,
   readdir:   readdir,
   readlink:  readlink,
   release:   release,
+  releasedir: release,
   rename:    rename,
   rmdir:     rmdir,
   symlink:   symlink,
@@ -274,6 +276,10 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
       var modemap = [ 4, 2, 6, -1 ];
       var access  = mf.chkaccess(doc, modemap[flags & 0x3]);
       if (access) { return cb(access); }
+      // Was O_DIRECTORY specified?
+      if ((flags & 0200000) && ((doc.mode & 0170000) !== 0040000)) {
+        return cb(fuse.ENOTDIR);
+      }
 
       // Add it to the list of open file descriptors
       var fd = mf.openFiles.add({
@@ -299,12 +305,14 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
 function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
   // Is it open for reading?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
-  if (mf.openFiles[fd].flags & 0x3 === 0x1) { return cb(fuse.EBADF); }
+  if ((mf.openFiles[fd].flags & 0x3) === 0x1) { return cb(fuse.EBADF); }
 
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
+    if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
+
     if (!doc.data) { return cb(0); }
     // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
     var srcbuf = doc.data.read(pos, len);
@@ -557,12 +565,13 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
 function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
   // Is it open for writing?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
-  if (mf.openFiles[fd].flags & 0x3 === 0x0) { return cb(fuse.EBADF); }
+  if ((mf.openFiles[fd].flags & 0x3) === 0x0) { return cb(fuse.EBADF); }
 
   // Look up the inode of the open file
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
+    if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
 
     // Make sure we have a buffer of exactly the size of the write data
     var dstbuf = new Buffer(len);
