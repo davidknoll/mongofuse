@@ -229,32 +229,42 @@ function init(cb /*:function*/) {
  */
 function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   var path = require('path');
+  var target;
 
-  // Look up the target's directory entry, to get its inode number
-  mf.resolvePath(src, function (err, srcdirent) {
-    if (err) { return cb(err); }
-    // Look up that inode, check it's not a directory
-    mf.db.inodes.findOne({ _id: srcdirent.inode }, function (err, srcinode) {
-      if (err)       { return cb(fuse.EIO); }
-      if (!srcinode) { return cb(fuse.ENOENT); }
-      if ((srcinode.mode & 0170000) === 0040000) { return cb(fuse.EPERM); }
+  async.waterfall([
+    function (acb) {
+      // Look up the target's directory entry, to get its inode number
+      mf.resolvePath(src, acb);
+    },
 
+    function (srcdirent, acb) {
+      target = srcdirent.inode;
+      // Look up that inode, to check it's not a directory
+      mf.db.inodes.findOne({ _id: target }, acb);
+    },
+
+    function (srcinode, acb) {
+      if (!srcinode) { return acb(fuse.ENOENT); }
+      if ((srcinode.mode & 0170000) === 0040000) { return acb(fuse.EPERM); }
       // Look up the new link's parent directory entry
-      mf.resolvePath(path.dirname(dest), function (err, destpdirent) {
-        if (err) { return cb(err); }
+      mf.resolvePath(path.dirname(dest), acb);
+    },
 
-        // Create the new directory entry
-        var newdirent = {
-          name:   path.basename(dest),
-          parent: destpdirent._id,
-          inode:  srcdirent.inode
-        };
-        mf.db.directory.insert(newdirent, function (err, doc) {
-          if (err) { return cb(fuse.EIO); }
-          cb(0);
-        });
-      });
-    });
+    function (destpdirent, acb) {
+      // Create the new directory entry
+      var newdirent = {
+        name:   path.basename(dest),
+        parent: destpdirent._id,
+        inode:  target
+      };
+      mf.db.directory.insert(newdirent, acb);
+    }
+
+  ], function (err, result) {
+    // FUSE errors (from resolvePath), MongoDB errors, success
+    if (err < 0) { return cb(err); }
+    if (err)     { return cb(fuse.EIO); }
+    cb(0);
   });
 }
 
