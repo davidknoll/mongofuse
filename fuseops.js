@@ -361,6 +361,7 @@ function readlink(path /*:string*/, cb /*:function*/) {
     mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
+      if ((doc.mode & 0170000) !== 0120000) { return cb(fuse.EINVAL); }
       // Get the target from it
       cb(0, doc.data.value());
     });
