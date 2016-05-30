@@ -150,7 +150,13 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
     if (!doc) { return cb(fuse.ENOENT); }
     // Get this live rather than storing it
     if (doc.data) { doc.size = doc.data.length(); }
-    cb(0, doc);
+
+    // Look up refcount, required to support hardlinks
+    mf.db.directory.count({ inode: inode }, function (err, cnt) {
+      if (err) { return cb(fuse.EIO); }
+      doc.nlink = cnt;
+      cb(0, doc);
+    });
   });
 }
 

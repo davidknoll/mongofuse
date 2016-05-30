@@ -1,5 +1,7 @@
 # mongofuse
-A FUSE filesystem, backed by MongoDB and written in Node.js. Mostly an exercise for me to learn MongoDB and Node.js.
+A FUSE filesystem, powered by MongoDB and written in Node.js.
+Mostly an exercise for me to learn MongoDB and Node.js.
+It aims towards POSIX functionality for use as a regular filesystem.
 
 ### Starting
 If cloned from GitHub, you'll need to run `npm install` from the directory of
@@ -24,7 +26,7 @@ inserting stuff into MongoDB first!
 * chmod, chown, chgrp (including updating ctime)
 * mknod (special files can be created, but can't be used with nodev in effect, see below)
 * mtime/ctime update on file write
-* symlinks
+* symlinks and hardlinks (won't hardlink directories)
 * File permissions enforced on open, truncate, ftruncate.
 Directory permissions enforced on opendir.
 access function is implemented.
@@ -37,7 +39,6 @@ You can traverse and create/delete files in any directory,
 although reading/listing permissions are enforced.
 * atimes aren't updated automatically. Nor are directory mtimes/ctimes when a file is created.
 * No way of specifying mount options on the command line (seems to default to nosuid, nodev)
-* hardlinks
 * extended attributes
 * Files larger than just under 16MB, due to the maximum document size in MongoDB.
 I now check for this and return EFBIG from ftruncate/truncate/write.

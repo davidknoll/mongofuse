@@ -17,6 +17,7 @@ module.exports = {
   ftruncate: ftruncate,
   getattr:   getattr,
   init:      init,
+  link:      link,
   mkdir:     mkdir,
   mknod:     mknod,
   open:      open,
@@ -215,6 +216,45 @@ function init(cb /*:function*/) {
         });
       });
     } else { cb(err); }
+  });
+}
+
+/**
+ * Create a hard link
+ *
+ * @param   {String}   src
+ * @param   {String}   dest
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  var path = require('path');
+
+  // Look up the target's directory entry, to get its inode number
+  mf.resolvePath(src, function (err, srcdirent) {
+    if (err) { return cb(err); }
+    // Look up that inode, check it's not a directory
+    mf.db.inodes.findOne({ _id: srcdirent.inode }, function (err, srcinode) {
+      if (err)       { return cb(fuse.EIO); }
+      if (!srcinode) { return cb(fuse.ENOENT); }
+      if ((srcinode.mode & 0170000) === 0040000) { return cb(fuse.EPERM); }
+
+      // Look up the new link's parent directory entry
+      mf.resolvePath(path.dirname(dest), function (err, destpdirent) {
+        if (err) { return cb(err); }
+
+        // Create the new directory entry
+        var newdirent = {
+          name:   path.basename(dest),
+          parent: destpdirent._id,
+          inode:  srcdirent.inode
+        };
+        mf.db.directory.insert(newdirent, function (err, doc) {
+          if (err) { return cb(fuse.EIO); }
+          cb(0);
+        });
+      });
+    });
   });
 }
 
