@@ -31,22 +31,26 @@ if (require.main === module) {
  * @returns {Number}
  */
 function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
-  if (argc !== 3) {
-    console.log("Usage: " + argv[0] + " connection-string mountpoint");
+  if ((argc !== 3) && (argc !== 5 || argv[3] !== "-o")) {
+    console.log("Usage: " + argv[0] + " connection-string mountpoint [-o option[,option]...]");
     return 1;
   }
 
   mf.db = mongojs(argv[1], [ "directory", "inodes" ]);
   var mountPath = argv[2];
+  if (argv[3] === "-o") {
+    ops.options = argv[4].split(",");
+    console.log("Mounting with options: " + ops.options.join(", "));
+  }
 
   fuse.mount(mountPath, ops, function (err) {
-    if (err) throw err;
-    console.log('filesystem mounted on ' + mountPath);
+    if (err) { throw err; }
+    console.log("Filesystem mounted at: " + mountPath);
   });
 
   process.on('SIGINT', function () {
     fuse.unmount(mountPath, function () {
-      console.log('filesystem at ' + mountPath + ' unmounted');
+      console.log("Unmounted");
       process.exit();
     });
   });
