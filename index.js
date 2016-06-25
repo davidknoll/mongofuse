@@ -33,7 +33,7 @@ if (require.main === module) {
       verbose: 'Show debugging output (can be specified twice)'
     })
     .epilogue('See also: https://www.npmjs.com/package/mongofuse')
-    .example('$0 localhost ~/mongo')
+    .example('$0 mongofuse ~/mongo', "Mounts a mongofuse filesystem in the 'mongofuse' database on localhost, to the directory ~/mongo")
     .help()
     .nargs('options', 1)
     .strict()
@@ -45,27 +45,23 @@ if (require.main === module) {
   if (Array.isArray(argv.options)) {
     argv.o = argv.options = argv.options.filter(function (opt) { return typeof opt === 'string'; }).join();
   }
-  argv.o = argv.options = argv.options.split(',');
+  if (typeof argv.options === 'string') {
+    argv.o = argv.options = argv.options.split(',');
+  }
 
   var returncode = main(argv);
   if (returncode) process.exit(returncode);
 }
 
 /**
- * @param   {Number} argc
- * @param   {Array}  argv
+ * @param   {Object} argv
  * @returns {Number}
  */
-function main(argc /*:number*/, argv /*:Array<string>*/) /*:number*/ {
-  if ((argc !== 3) && (argc !== 5 || argv[3] !== "-o")) {
-    console.log("Usage: " + argv[0] + " connection-string mountpoint [-o option[,option]...]");
-    return 1;
-  }
-
-  mf.db = mongojs(argv[1], [ "directory", "inodes" ]);
-  var mountPath = argv[2];
-  if (argv[3] === "-o") {
-    ops.options = argv[4].split(",");
+function main(argv /*:Object*/) /*:number*/ {
+  mf.db = mongojs(argv._[0], [ "directory", "inodes" ]);
+  var mountPath = argv._[1];
+  if (Array.isArray(argv.options)) {
+    ops.options = argv.options;
     console.log("Mounting with options: " + ops.options.join(", "));
   }
 
