@@ -148,8 +148,12 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
-    // Get this live rather than storing it
-    if (doc.data) { doc.size = doc.data.length(); }
+    // Find and store the size if we didn't already have it
+    // However we've still retrieved the data when we only really want the attributes
+    if (doc.data && doc.size === undefined) {
+      doc.size = doc.data.length();
+      mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }, function (err, result) {});
+    }
 
     // Look up refcount, required to support hardlinks
     mf.db.directory.count({ inode: inode }, function (err, cnt) {

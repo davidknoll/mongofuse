@@ -637,6 +637,7 @@ function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*
     var set = {
       ctime: Date.now(),
       mtime: Date.now(),
+      size:  doc.data.length(),
       data:  doc.data
     };
 
