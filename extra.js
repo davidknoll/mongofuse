@@ -27,7 +27,12 @@ module.exports = {
     }
   },
   resolvePath: resolvePath,
-  useringroup: useringroup
+  useringroup: useringroup,
+
+  // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
+  WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
+  INFO:  function INFO()  { global.VERBOSE_LEVEL >= 1 && console.log.apply(console, arguments); },
+  DEBUG: function DEBUG() { global.VERBOSE_LEVEL >= 2 && console.log.apply(console, arguments); }
 };
 var mf = module.exports;
 

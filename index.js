@@ -42,6 +42,7 @@ if (require.main === module) {
     .version()
     .argv;
 
+  global.VERBOSE_LEVEL = argv.verbose;
   if (Array.isArray(argv.options)) {
     argv.o = argv.options = argv.options.filter(function (opt) { return typeof opt === 'string'; }).join();
   }
