@@ -57,10 +57,11 @@ if (require.main === module) {
  * @param   {Object} argv
  * @returns {Number}
  */
-function main(argv /*:Object*/) /*:number*/ {
+function main(argv /*:{_:Array<string>}*/) /*:number*/ {
   mf.db = mongojs(argv._[0], [ "directory", "inodes" ]);
   var mountPath = argv._[1];
   if (Array.isArray(argv.options)) {
+    // $FlowIssue https://github.com/facebook/flow/issues/1606
     ops.options = argv.options;
     console.log("Mounting with options: " + ops.options.join(", "));
   }
