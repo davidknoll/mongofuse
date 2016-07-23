@@ -64,17 +64,17 @@ function main(argv /*:{_:Array<string>}*/) /*:number*/ {
   if (Array.isArray(argv.options)) {
     // $FlowIssue https://github.com/facebook/flow/issues/1606
     ops.options = argv.options;
-    console.log("Mounting with options: " + ops.options.join(", "));
+    mf.INFO("Mounting with options: %s", ops.options.join(", "));
   }
 
   fuse.mount(mountPath, ops, function (err) {
     if (err) { throw err; }
-    console.log("Filesystem mounted at: " + mountPath);
+    mf.INFO("Filesystem mounted at: %s", mountPath);
   });
 
   process.on('SIGINT', function () {
     fuse.unmount(mountPath, function () {
-      console.log("Unmounted");
+      mf.INFO("Unmounted");
       process.exit();
     });
   });
