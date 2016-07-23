@@ -51,6 +51,8 @@ var mf      = require('./extra.js');
  * @returns {undefined}
  */
 function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[access] path %s, mode %d (dec)', path, mode);
+
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -74,6 +76,8 @@ function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[chmod] path %s, mode %d (dec)', path, mode);
+
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -114,6 +118,8 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[chown] path %s, uid %d, gid %d', path, uid, gid);
+
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -150,6 +156,7 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
  * @returns {undefined}
  */
 function fgetattr(path /*:string*/, fd /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[fgetattr] path %s, fd %d', path, fd);
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   mf.igetattr(mf.openFiles[fd].inode, cb);
 }
@@ -164,6 +171,7 @@ function fgetattr(path /*:string*/, fd /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function ftruncate(path /*:string*/, fd /*:number*/, size /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[ftruncate] path %s, fd %d, size %d (bytes)', path, fd, size);
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   mf.itruncate(mf.openFiles[fd].inode, size, cb);
 }
@@ -176,6 +184,7 @@ function ftruncate(path /*:string*/, fd /*:number*/, size /*:number*/, cb /*:fun
  * @returns {undefined}
  */
 function getattr(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[getattr] path %s', path);
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     mf.igetattr(dirent.inode, cb);
@@ -189,10 +198,12 @@ function getattr(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function init(cb /*:function*/) {
+  mf.DEBUG('[init]');
+
   // Does the root directory exist?
   mf.resolvePath("/", function (err, dirent) {
     if (err === fuse.ENOENT) {
-      console.log("Creating root directory");
+      mf.INFO("Creating root directory");
       // Create the root directory's inode, using details of invoking user
       mf.db.inodes.insert({
         mode:  0040777 & ~process.umask(),
@@ -228,6 +239,7 @@ function init(cb /*:function*/) {
  * @returns {undefined}
  */
 function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[link] src %s (target), dest %s (link)', src, dest);
   var path = require('path');
   var target;
 
@@ -277,6 +289,7 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[mkdir] path %s, mode %d (dec)', path, mode);
   // Set file type bits for a directory, as they aren't supplied here
   mknod(path, (mode & 07777) | 0040000, 0, cb);
 }
@@ -291,6 +304,8 @@ function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function mknod(path /*:string*/, mode /*:number*/, dev /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[mknod] path %s, mode %d (dec), dev %d (major*256 + minor)', path, mode, dev);
+
   // mode includes file type bits, dev is (major << 8) + minor
   // (and is called rdev in the inode / what gets returned by getattr)
   var context = fuse.context();
@@ -314,6 +329,8 @@ function mknod(path /*:string*/, mode /*:number*/, dev /*:number*/, cb /*:functi
  * @returns {undefined}
  */
 function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[open] path %s, flags %d (dec)', path, flags);
+
   // If this is a new file it will already have been created by mknod
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -353,6 +370,8 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[read] path %s, fd %d, len %d (bytes), pos %d (bytes)', path, fd, len, pos);
+
   // Is it open for reading?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   if ((mf.openFiles[fd].flags & 0x3) === 0x1) { return cb(fuse.EBADF); }
@@ -379,6 +398,8 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
  * @returns {undefined}
  */
 function readdir(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[readdir] path %s', path);
+
   // Look up the requested directory itself
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -404,6 +425,8 @@ function readdir(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function readlink(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[readlink] path %s', path);
+
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -427,6 +450,8 @@ function readlink(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[release] path %s, fd %d', path, fd);
+
   // If an open file, close it
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   var inode = mf.openFiles[fd].inode;
@@ -445,6 +470,7 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[rename] src %s, dest %s', src, dest);
   var pathmod = require('path');
   var dirent;
 
@@ -485,6 +511,8 @@ function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function rmdir(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[rmdir] path %s', path);
+
   // Look up the directory being deleted
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -506,6 +534,8 @@ function rmdir(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[symlink] src %s (target), dest %s (link)', src, dest);
+
   // mknod with mode set for a symlink, the target being stored as if file data
   var context = fuse.context();
   mf.doMknod(dest, {
@@ -528,6 +558,7 @@ function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[truncate] path %s, size %d (bytes)', path, size);
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     mf.itruncate(dirent.inode, size, cb);
@@ -542,6 +573,8 @@ function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function unlink(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[unlink] path %s', path);
+
   var dirent;
   async.waterfall([
     function (acb) {
@@ -578,6 +611,8 @@ function unlink(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:function*/) {
+  mf.DEBUG('[utimens] path %s, atime %d (ms), mtime %d (ms)', path, atime, mtime);
+
   // Look up the requested directory entry
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
@@ -614,6 +649,8 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
  * @returns {undefined}
  */
 function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/, pos /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[write] path %s, fd %d, len %d (bytes), pos %d (bytes)', path, fd, len, pos);
+
   // Is it open for writing?
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
   if ((mf.openFiles[fd].flags & 0x3) === 0x0) { return cb(fuse.EBADF); }

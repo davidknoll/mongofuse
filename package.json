@@ -32,7 +32,8 @@
     "async": "^1.5.2",
     "fuse-bindings": "^2.8.1",
     "mongojs": "^2.4.0",
-    "posix": "^4.0.2"
+    "posix": "^4.0.2",
+    "yargs": "^4.7.1"
   },
   "devDependencies": {
     "flow-bin": "^0.24.1",
