@@ -23,11 +23,17 @@ module.exports = {
     add:  function (data /*:{inode:string,flags:number}*/) {
       var fd   = this.next++;
       this[fd] = data;
+      mf.DEBUG('fd %d opened', fd);
       return fd;
     }
   },
   resolvePath: resolvePath,
-  useringroup: useringroup
+  useringroup: useringroup,
+
+  // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
+  WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
+  INFO:  function INFO()  { global.VERBOSE_LEVEL >= 1 && console.log.apply(console, arguments); },
+  DEBUG: function DEBUG() { global.VERBOSE_LEVEL >= 2 && console.log.apply(console, arguments); }
 };
 var mf = module.exports;
 
@@ -46,6 +52,8 @@ var posix   = require('posix');
  * @returns {undefined}
  */
 function doMknod(path /*:string*/, inode /*:Object*/, cb /*:function*/) {
+  mf.DEBUG('Create %s', path);
+
   // Look up the directory the new file will go in
   var pathmod = require('path');
   mf.resolvePath(pathmod.dirname(path), function (err, dirent) {
@@ -76,6 +84,8 @@ function doMknod(path /*:string*/, inode /*:Object*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function resolvePath(path /*:string*/, cb /*:function*/) {
+  mf.DEBUG('Resolve path %s', path);
+
   // Split path into components
   // Note that splitting "/" on "/" gives two empty-string components, we don't want that
   if (path === "/") { path = ""; }
@@ -108,6 +118,8 @@ function resolvePath(path /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
+  mf.DEBUG('Truncate inode %s to %d bytes', inode, size);
+
   // Look up that inode
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -144,6 +156,8 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function igetattr(inode /*:string*/, cb /*:function*/) {
+  mf.DEBUG('Get attributes of inode %s', inode);
+
   // Look up that inode
   mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
@@ -172,6 +186,8 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
  * @returns {undefined}
  */
 function iremove(inode /*:string*/, cb /*:function*/) {
+  mf.DEBUG('Remove inode %s if unreferenced', inode);
+
   // Is it open?
   for (var fd in mf.openFiles) {
     if (mf.openFiles[fd].inode === inode) { return cb(0); }
@@ -200,6 +216,8 @@ function iremove(inode /*:string*/, cb /*:function*/) {
  * @returns {Boolean}
  */
 function useringroup(uid /*:number*/, gid /*:number*/) {
+  mf.DEBUG('Check if user %d in group %d', uid, gid);
+
   var pwnam = posix.getpwnam(uid);
   var grnam = posix.getgrnam(gid);
   // ie. was anything returned for the above?
@@ -214,7 +232,9 @@ function useringroup(uid /*:number*/, gid /*:number*/) {
  * @param   {Number} mode
  * @returns {Number}
  */
-function chkaccess(inode /*:{mode:number,uid:number,gid:number}*/, mode /*:number*/) {
+function chkaccess(inode /*:{_id:string,mode:number,uid:number,gid:number}*/, mode /*:number*/) {
+  mf.DEBUG('Check access mode %d allowed to inode %s', mode, inode._id);
+
   var context = fuse.context();
   if (mode < 0 || mode > 7) {
     // Invalid access mode
