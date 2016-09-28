@@ -159,21 +159,32 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
   mf.DEBUG('Get attributes of inode %s', inode);
 
   // Look up that inode
-  mf.db.inodes.findOne({ _id: inode }, function (err, doc) {
+  mf.db.inodes.findOne({ _id: inode }, { data: false }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
-    // Find and store the size if we didn't already have it
-    // However we've still retrieved the data when we only really want the attributes
-    if (doc.data && doc.size === undefined) {
-      doc.size = doc.data.length();
-      mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }, function (err, result) {});
-    }
 
-    // Look up refcount, required to support hardlinks
+    // Look up link count, required to support hardlinks
     mf.db.directory.count({ inode: inode }, function (err, cnt) {
       if (err) { return cb(fuse.EIO); }
       doc.nlink = cnt;
-      cb(0, doc);
+
+      // Find and store the size if we didn't already have it
+      if (doc.size === undefined) {
+        mf.db.inodes.findOne({ _id: inode }, function (err, idoc) {
+          if (err)   { return cb(fuse.EIO); }
+          if (!idoc) { return cb(fuse.ENOENT); }
+          doc.size = idoc.data ? idoc.data.length() : 0;
+
+          mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }), function (err, iidoc) {
+            if (err) { return cb(fuse.EIO); }
+            return cb(0, doc);
+          };
+        });
+
+      // We already had it, return the inode as it now stands
+      } else {
+        return cb(0, doc);
+      }
     });
   });
 }

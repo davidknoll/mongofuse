@@ -210,6 +210,7 @@ function init(cb /*:function*/) {
         mode:  0040777 & ~process.umask(),
         uid:   process.geteuid ? process.geteuid() : 0, // Only on POSIX platforms
         gid:   process.getegid ? process.getegid() : 0, // Only on POSIX platforms
+        rdev:  0,
         ctime: Date.now(),
         mtime: Date.now(),
         atime: Date.now()
