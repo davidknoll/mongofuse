@@ -170,15 +170,16 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
 
       // Find and store the size if we didn't already have it
       if (doc.size === undefined) {
+        mf.DEBUG('Size not stored, finding it');
         mf.db.inodes.findOne({ _id: inode }, function (err, idoc) {
           if (err)   { return cb(fuse.EIO); }
           if (!idoc) { return cb(fuse.ENOENT); }
           doc.size = idoc.data ? idoc.data.length() : 0;
 
-          mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }), function (err, iidoc) {
+          mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }, function (err, iidoc) {
             if (err) { return cb(fuse.EIO); }
             return cb(0, doc);
-          };
+          });
         });
 
       // We already had it, return the inode as it now stands
