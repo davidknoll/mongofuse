@@ -57,7 +57,7 @@ function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       // Check the requested permission against the inode
@@ -82,7 +82,7 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -124,7 +124,7 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -254,7 +254,7 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
     function (srcdirent, acb) {
       target = srcdirent.inode;
       // Look up that inode, to check it's not a directory
-      mf.db.inodes.findOne({ _id: target }, acb);
+      mf.db.inodes.findOne({ _id: target }, { data: false }, acb);
     },
 
     function (srcinode, acb) {
@@ -337,7 +337,7 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     // Look up the inode...
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -619,7 +619,7 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       // Store times as UNIX timestamps in milliseconds

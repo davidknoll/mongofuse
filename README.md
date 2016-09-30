@@ -35,6 +35,8 @@ access function is implemented.
 You can't read from a fd opened with O_WRONLY and vice versa.
 You can't chmod/chown/chgrp when you shouldn't be allowed to.
 * Accepts basic FUSE mount options on the command line (eg. `-o allow_other`)
+* The size is now stored explicitly in the inode, avoiding looking up
+the data if it's only the attributes we're interested in.
 
 ### Things that don't work / aren't present (yet)
 * Directory permissions are partially but not fully enforced.
@@ -52,5 +54,4 @@ I now check for this and return EFBIG from ftruncate/truncate/write.
 The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).
 * I don't know if it works on OSes other than Linux, I haven't tried.
 * Performance is probably pants, due to things like lack of caching,
-storing the data itself within the inode document, and not explicitly
-storing the filesize but counting the length of the data in getattr.
+and storing the data itself within the inode document.
