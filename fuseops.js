@@ -384,11 +384,15 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
     if (!doc) { return cb(fuse.ENOENT); }
     if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
 
-    if (!doc.data) { return cb(0); }
-    // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
-    var srcbuf = doc.data.read(pos, len);
-    var copied = srcbuf.copy(buf);
-    cb(copied);
+    // Does the atime need updating?
+    mf.chkatime(doc, function (err) {
+      if (err)       { return cb(fuse.EIO); }
+      if (!doc.data) { return cb(0); }
+      // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
+      var srcbuf = doc.data.read(pos, len);
+      var copied = srcbuf.copy(buf);
+      return cb(copied);
+    });
   });
 }
 
