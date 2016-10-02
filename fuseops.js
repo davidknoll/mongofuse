@@ -7,6 +7,7 @@
  * @file
  * @flow
  */
+'use strict';
 
 // Exports
 module.exports = {
@@ -37,10 +38,10 @@ module.exports = {
 };
 
 // Imports
-var async   = require('async');
-var fuse    = require('fuse-bindings');
-var mongojs = require('mongojs');
-var mf      = require('./extra.js');
+const async   = require('async');
+const fuse    = require('fuse-bindings');
+const mongojs = require('mongojs');
+const mf      = require('./extra.js');
 
 /**
  * Check permissions before accessing a file
@@ -88,12 +89,12 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
 
       // In testing, the mode passed in does have the file type bits set,
       // but we probably don't want to go changing them so mask them just in case
-      var set = {
+      const set = {
         ctime: Date.now(),
-        mode:  (doc.mode & 0170000) | (mode & 07777)
+        mode:  (doc.mode & 0o170000) | (mode & 0o7777)
       };
       // Is this allowed?
-      var context = fuse.context();
+      const context = fuse.context();
       if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
 
       // Save changes
@@ -129,11 +130,11 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
       if (!doc) { return cb(fuse.ENOENT); }
 
       // If we're setting only uid or only gid, the other will be -1
-      var set /*:{uid?:number,gid?:number}*/ = { ctime: Date.now() };
+      const set /*:{uid?:number,gid?:number}*/ = { ctime: Date.now() };
       if (uid >= 0) { set.uid = uid; }
       if (gid >= 0) { set.gid = gid; }
       // Is this allowed?
-      var context = fuse.context();
+      const context = fuse.context();
       if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
       if (context.uid !== 0 && uid !== -1 && context.uid !== uid) { return cb(fuse.EPERM); }
       if (context.uid !== 0 && gid !== -1 && !mf.useringroup(context.uid, gid)) { return cb(fuse.EPERM); }
@@ -207,7 +208,7 @@ function init(cb /*:function*/) {
       // Create the root directory's inode, using details of invoking user
       mf.db.inodes.insert({
         // $FlowIssue argument to umask is optional, see the docs
-        mode:  0040777 & ~process.umask(),
+        mode:  0o040777 & ~process.umask(),
         uid:   process.geteuid ? process.geteuid() : 0, // Only on POSIX platforms
         gid:   process.getegid ? process.getegid() : 0, // Only on POSIX platforms
         rdev:  0,
@@ -242,8 +243,8 @@ function init(cb /*:function*/) {
  */
 function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   mf.DEBUG('[link] src %s (target), dest %s (link)', src, dest);
-  var path = require('path');
-  var target;
+  const path = require('path');
+  let target;
 
   async.waterfall([
     function (acb) {
@@ -259,14 +260,14 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
 
     function (srcinode, acb) {
       if (!srcinode) { return acb(fuse.ENOENT); }
-      if ((srcinode.mode & 0170000) === 0040000) { return acb(fuse.EPERM); }
+      if ((srcinode.mode & 0o170000) === 0o040000) { return acb(fuse.EPERM); }
       // Look up the new link's parent directory entry
       mf.resolvePath(path.dirname(dest), acb);
     },
 
     function (destpdirent, acb) {
       // Create the new directory entry
-      var newdirent = {
+      const newdirent = {
         name:   path.basename(dest),
         parent: destpdirent._id,
         inode:  target
@@ -293,7 +294,7 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
 function mkdir(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mf.DEBUG('[mkdir] path %s, mode %d (dec)', path, mode);
   // Set file type bits for a directory, as they aren't supplied here
-  mknod(path, (mode & 07777) | 0040000, 0, cb);
+  mknod(path, (mode & 0o7777) | 0o040000, 0, cb);
 }
 
 /**
@@ -310,7 +311,7 @@ function mknod(path /*:string*/, mode /*:number*/, dev /*:number*/, cb /*:functi
 
   // mode includes file type bits, dev is (major << 8) + minor
   // (and is called rdev in the inode / what gets returned by getattr)
-  var context = fuse.context();
+  const context = fuse.context();
   mf.doMknod(path, {
     mode:  mode,
     uid:   context.uid,
@@ -342,16 +343,16 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
       if (!doc) { return cb(fuse.ENOENT); }
 
       // ...in order to check permissions
-      var modemap = [ 4, 2, 6, -1 ];
-      var access  = mf.chkaccess(doc, modemap[flags & 0x3]);
+      const modemap = [ 4, 2, 6, -1 ];
+      const access  = mf.chkaccess(doc, modemap[flags & 0x3]);
       if (access) { return cb(access); }
       // Was O_DIRECTORY specified?
-      if ((flags & 0200000) && ((doc.mode & 0170000) !== 0040000)) {
+      if ((flags & 0o200000) && ((doc.mode & 0o170000) !== 0o040000)) {
         return cb(fuse.ENOTDIR);
       }
 
       // Add it to the list of open file descriptors
-      var fd = mf.openFiles.add({
+      const fd = mf.openFiles.add({
         inode: dirent.inode,
         flags: flags
       });
@@ -382,15 +383,15 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
-    if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
+    if ((doc.mode & 0o170000) === 0o040000) { return cb(fuse.EISDIR); }
 
     // Does the atime need updating?
     mf.chkatime(doc, function (err) {
       if (err)       { return cb(fuse.EIO); }
       if (!doc.data) { return cb(0); }
       // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
-      var srcbuf = doc.data.read(pos, len);
-      var copied = srcbuf.copy(buf);
+      const srcbuf = doc.data.read(pos, len);
+      const copied = srcbuf.copy(buf);
       return cb(copied);
     });
   });
@@ -427,7 +428,7 @@ function readdir(path /*:string*/, cb /*:function*/) {
       // Look up children of the requested directory
       mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
         if (err) { return cb(fuse.EIO); }
-        var names = docs.map(function (cdir) { return cdir.name; });
+        const names = docs.map(function (cdir) { return cdir.name; });
         // According to POSIX we're only meant to return . and .. if the entries actually exist,
         // but if we don't they won't appear in a directory listing.
         // We don't need to process them further ourselves- the paths we get are already canonicalised.
@@ -456,7 +457,7 @@ function readlink(path /*:string*/, cb /*:function*/) {
     mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
-      if ((doc.mode & 0170000) !== 0120000) { return cb(fuse.EINVAL); }
+      if ((doc.mode & 0o170000) !== 0o120000) { return cb(fuse.EINVAL); }
       // Does the atime of the symlink itself need updating?
       mf.chkatime(doc, function (err) {
         if (err) { return cb(fuse.EIO); }
@@ -480,7 +481,7 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
 
   // If an open file, close it
   if (!mf.openFiles[fd]) { return cb(fuse.EBADF); }
-  var inode = mf.openFiles[fd].inode;
+  const inode = mf.openFiles[fd].inode;
   delete mf.openFiles[fd];
 
   // Remove the inode if it has no more references
@@ -497,8 +498,8 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
  */
 function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   mf.DEBUG('[rename] src %s, dest %s', src, dest);
-  var pathmod = require('path');
-  var dirent;
+  const pathmod = require('path');
+  let dirent;
 
   async.waterfall([
     function (acb) {
@@ -514,7 +515,7 @@ function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
 
     function (pdirent, acb) {
       // Set the new name and parent
-      var set = {
+      const set = {
         name:   pathmod.basename(dest),
         parent: pdirent._id
       };
@@ -563,9 +564,9 @@ function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   mf.DEBUG('[symlink] src %s (target), dest %s (link)', src, dest);
 
   // mknod with mode set for a symlink, the target being stored as if file data
-  var context = fuse.context();
+  const context = fuse.context();
   mf.doMknod(dest, {
-    mode:  0120777,
+    mode:  0o120777,
     uid:   context.uid,
     gid:   context.gid,
     ctime: Date.now(),
@@ -601,7 +602,7 @@ function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
 function unlink(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[unlink] path %s', path);
 
-  var dirent;
+  let dirent;
   async.waterfall([
     function (acb) {
       // Look up the requested directory entry
@@ -650,7 +651,7 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
       // If doing touch -a or touch -m, the other time still gets passed
       // For some strange reason, when testing this by repeatedly touching a file,
       // the changing time(s) getting passed in here were jumping about randomly over 15min or so
-      var set = {
+      const set = {
         atime: atime.getTime(),
         mtime: mtime.getTime(),
         ctime: Date.now()
@@ -685,19 +686,19 @@ function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*
   mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
-    if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
+    if ((doc.mode & 0o170000) === 0o040000) { return cb(fuse.EISDIR); }
 
     // Make sure we have a buffer of exactly the size of the write data
-    var dstbuf = new Buffer(len);
+    const dstbuf = new Buffer(len);
     dstbuf.fill(0);
-    var copied = buf.copy(dstbuf, 0, 0, len);
+    const copied = buf.copy(dstbuf, 0, 0, len);
     if (!doc.data) { doc.data = new mongojs.Binary(new Buffer(0), 0); }
     doc.data.write(dstbuf, pos);
     // Note MongoDB's max document size.
     // This leaves a bit of space for the rest of the inode data.
     if (doc.data.length() > 16000000) { return cb(fuse.EFBIG); }
     // Update the inode (yes we're storing the data with the inode right now)
-    var set = {
+    const set = {
       ctime: Date.now(),
       mtime: Date.now(),
       size:  doc.data.length(),

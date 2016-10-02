@@ -8,18 +8,19 @@
  * @file
  * @flow
  */
+'use strict';
 
 // Imports
-var fuse    = require('fuse-bindings');
-var mongojs = require('mongojs');
-var yargs   = require('yargs');
-var mf      = require('./extra.js');
-var ops     = require('./fuseops.js');
+const fuse    = require('fuse-bindings');
+const mongojs = require('mongojs');
+const yargs   = require('yargs');
+const mf      = require('./extra.js');
+const ops     = require('./fuseops.js');
 
 // Parse command-line arguments
 // $FlowFixMe: Testing require.main === module is in the Node docs!
 if (require.main === module) {
-  var argv = yargs
+  const argv = yargs
     .alias({
       help:    'h',
       options: 'o',
@@ -59,7 +60,7 @@ if (require.main === module) {
     global.ATIME_LEVEL = 1; // relatime
   }
 
-  var returncode = main(argv);
+  const returncode = main(argv);
   if (returncode) process.exit(returncode);
 }
 
@@ -69,7 +70,7 @@ if (require.main === module) {
  */
 function main(argv /*:{_:Array<string>}*/) /*:number*/ {
   mf.db = mongojs(argv._[0], [ "directory", "inodes" ]);
-  var mountPath = argv._[1];
+  const mountPath = argv._[1];
   if (Array.isArray(argv.options)) {
     // $FlowIssue https://github.com/facebook/flow/issues/1606
     ops.options = argv.options;
