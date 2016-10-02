@@ -11,16 +11,16 @@
 
 // Exports
 module.exports = {
-  chkaccess:   chkaccess,
-  chkatime:    chkatime,
+  chkaccess,
+  chkatime,
   // MongoJS database object
-  db:          ({} /*:Object*/), // Filled in by main()
-  doMknod:     doMknod,
-  igetattr:    igetattr,
-  iremove:     iremove,
-  itruncate:   itruncate,
+  db: ({} /*:Object*/), // Filled in by main()
+  doMknod,
+  igetattr,
+  iremove,
+  itruncate,
   // Manages open file descriptors
-  openFiles:   {
+  openFiles: {
     next: 10,
     add:  function (data /*:{inode:string,flags:number}*/) {
       const fd = this.next++;
@@ -29,8 +29,8 @@ module.exports = {
       return fd;
     }
   },
-  resolvePath: resolvePath,
-  useringroup: useringroup,
+  resolvePath,
+  useringroup,
 
   // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
   WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
