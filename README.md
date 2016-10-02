@@ -28,6 +28,7 @@ inserting stuff into MongoDB first!
 * chmod, chown, chgrp (including updating ctime)
 * mknod (special files can be created, but can't be used with nodev in effect, see below)
 * mtime/ctime update on file write
+* atime update on file read, directory list, symlink resolution. atime/relatime/noatime options.
 * symlinks and hardlinks (won't hardlink directories)
 * File permissions enforced on open, truncate, ftruncate.
 Directory permissions enforced on opendir.
@@ -43,7 +44,7 @@ the data if it's only the attributes we're interested in.
 You can traverse and create/delete files in any directory,
 although reading/listing permissions are enforced.
 (Mounting with the `default_permissions` option is a possible solution.)
-* atimes aren't updated automatically. Nor are directory mtimes/ctimes when a file is created.
+* Directory mtimes/ctimes aren't updated when a file is created.
 * When I repeatedly `touch` a file without specifying a time, the atime/mtime
 that are passed to my utimens function jump about non-monotonically over a
 number of minutes. They can also be a number of minutes away from `Date.now()`

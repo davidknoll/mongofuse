@@ -53,7 +53,7 @@ if (require.main === module) {
     global.ATIME_LEVEL = 1; // relatime
   } else if (argv.options.indexOf('noatime') !== -1) {
     global.ATIME_LEVEL = 0; // noatime
-  } else if (argv.options.indexOf('atime') !== -1 || argv.options.indexOf('strictatime') !== -1) {
+  } else if (argv.options.indexOf('atime') !== -1) {
     global.ATIME_LEVEL = 2; // atime
   } else {
     global.ATIME_LEVEL = 1; // relatime
