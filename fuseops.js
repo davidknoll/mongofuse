@@ -406,29 +406,36 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
 function readdir(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[readdir] path %s', path);
 
-  // Look up the requested directory itself, and its inode
+  // Look up the requested directory itself
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, inode) {
-      if (err) { return cb(fuse.EIO); }
-      // TODO: Insert directory permissions checks here?
 
-      // Does the directory atime need updating?
-      mf.chkatime(inode, function (err) {
+    // Does the directory atime need updating?
+    if (global.ATIME_LEVEL) {
+      mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, inode) {
         if (err) { return cb(fuse.EIO); }
-        // Look up children of the requested directory
-        mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
+        mf.chkatime(inode, function (err) {
           if (err) { return cb(fuse.EIO); }
-          var names = docs.map(function (cdir) { return cdir.name; });
-          // According to POSIX we're only meant to return . and .. if the entries actually exist,
-          // but if we don't they won't appear in a directory listing.
-          // We don't need to process them further ourselves- the paths we get are already canonicalised.
-          names.unshift('..');
-          names.unshift('.');
-          cb(0, names);
+          readdir_inner();
         });
       });
-    });
+    } else {
+      readdir_inner();
+    }
+
+    function readdir_inner() {
+      // Look up children of the requested directory
+      mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
+        if (err) { return cb(fuse.EIO); }
+        var names = docs.map(function (cdir) { return cdir.name; });
+        // According to POSIX we're only meant to return . and .. if the entries actually exist,
+        // but if we don't they won't appear in a directory listing.
+        // We don't need to process them further ourselves- the paths we get are already canonicalised.
+        names.unshift('..');
+        names.unshift('.');
+        cb(0, names);
+      });
+    }
   });
 }
 
