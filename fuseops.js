@@ -384,11 +384,15 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
     if (!doc) { return cb(fuse.ENOENT); }
     if ((doc.mode & 0170000) === 0040000) { return cb(fuse.EISDIR); }
 
-    if (!doc.data) { return cb(0); }
-    // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
-    var srcbuf = doc.data.read(pos, len);
-    var copied = srcbuf.copy(buf);
-    cb(copied);
+    // Does the atime need updating?
+    mf.chkatime(doc, function (err) {
+      if (err)       { return cb(fuse.EIO); }
+      if (!doc.data) { return cb(0); }
+      // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
+      var srcbuf = doc.data.read(pos, len);
+      var copied = srcbuf.copy(buf);
+      return cb(copied);
+    });
   });
 }
 
@@ -405,17 +409,33 @@ function readdir(path /*:string*/, cb /*:function*/) {
   // Look up the requested directory itself
   mf.resolvePath(path, function (err, dirent) {
     if (err) { return cb(err); }
-    // Look up children of the requested directory
-    mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
-      if (err) { return cb(fuse.EIO); }
-      var names = docs.map(function (cdir) { return cdir.name; });
-      // According to POSIX we're only meant to return . and .. if the entries actually exist,
-      // but if we don't they won't appear in a directory listing.
-      // We don't need to process them further ourselves- the paths we get are already canonicalised.
-      names.unshift('..');
-      names.unshift('.');
-      cb(0, names);
-    });
+
+    // Does the directory atime need updating?
+    if (global.ATIME_LEVEL) {
+      mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, inode) {
+        if (err) { return cb(fuse.EIO); }
+        mf.chkatime(inode, function (err) {
+          if (err) { return cb(fuse.EIO); }
+          readdir_inner();
+        });
+      });
+    } else {
+      readdir_inner();
+    }
+
+    function readdir_inner() {
+      // Look up children of the requested directory
+      mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
+        if (err) { return cb(fuse.EIO); }
+        var names = docs.map(function (cdir) { return cdir.name; });
+        // According to POSIX we're only meant to return . and .. if the entries actually exist,
+        // but if we don't they won't appear in a directory listing.
+        // We don't need to process them further ourselves- the paths we get are already canonicalised.
+        names.unshift('..');
+        names.unshift('.');
+        cb(0, names);
+      });
+    }
   });
 }
 
@@ -437,8 +457,12 @@ function readlink(path /*:string*/, cb /*:function*/) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       if ((doc.mode & 0170000) !== 0120000) { return cb(fuse.EINVAL); }
-      // Get the target from it
-      cb(0, doc.data.value());
+      // Does the atime of the symlink itself need updating?
+      mf.chkatime(doc, function (err) {
+        if (err) { return cb(fuse.EIO); }
+        // Get the target from the data, stored in the inode
+        cb(0, doc.data.value());
+      });
     });
   });
 }

@@ -11,6 +11,7 @@
 // Exports
 module.exports = {
   chkaccess:   chkaccess,
+  chkatime:    chkatime,
   // MongoJS database object
   db:          ({} /*:Object*/), // Filled in by main()
   doMknod:     doMknod,
@@ -273,5 +274,32 @@ function chkaccess(inode /*:{_id:string,mode:number,uid:number,gid:number}*/, mo
     var obits  = (inode.mode >> 0) & 7;
     var omatch = ((obits & mode) === mode);
     return omatch ? 0 : fuse.EACCES;
+  }
+}
+
+/**
+ * Check whether an inode object's atime needs updating, and if so, do it.
+ *
+ * @param {Object}   inode
+ * @param {Function} cb
+ */
+function chkatime(inode /*:{_id:string,atime:number,ctime:number,mtime:number}*/, cb /*:function*/) {
+  if (
+    global.ATIME_LEVEL === 2 ||    // atime
+    (global.ATIME_LEVEL === 1 && ( // relatime
+      // Is atime older than mtime, older than ctime, or older than a day?
+      // See: http://lxr.free-electrons.com/source/fs/inode.c#L1541
+      inode.mtime >= inode.atime ||
+      inode.ctime >= inode.atime ||
+      (Date.now() - inode.atime) >= (24 * 60 * 60 * 1000)
+    ))
+  ) {
+    // Update it
+    mf.DEBUG('Updating atime for inode %s', inode._id);
+    inode.atime = Date.now();
+    mf.db.inodes.update({ _id: inode._id }, { $set: { atime: inode.atime } }, cb);
+  } else {
+    // Doesn't need updating
+    cb(0);
   }
 }

@@ -49,6 +49,15 @@ if (require.main === module) {
   if (typeof argv.options === 'string') {
     argv.o = argv.options = argv.options.split(',');
   }
+  if (!argv.options) {
+    global.ATIME_LEVEL = 1; // relatime
+  } else if (argv.options.indexOf('noatime') !== -1) {
+    global.ATIME_LEVEL = 0; // noatime
+  } else if (argv.options.indexOf('atime') !== -1) {
+    global.ATIME_LEVEL = 2; // atime
+  } else {
+    global.ATIME_LEVEL = 1; // relatime
+  }
 
   var returncode = main(argv);
   if (returncode) process.exit(returncode);
