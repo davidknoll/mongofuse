@@ -457,8 +457,12 @@ function readlink(path /*:string*/, cb /*:function*/) {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       if ((doc.mode & 0170000) !== 0120000) { return cb(fuse.EINVAL); }
-      // Get the target from it
-      cb(0, doc.data.value());
+      // Does the atime of the symlink itself need updating?
+      mf.chkatime(doc, function (err) {
+        if (err) { return cb(fuse.EIO); }
+        // Get the target from the data, stored in the inode
+        cb(0, doc.data.value());
+      });
     });
   });
 }
