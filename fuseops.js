@@ -17,6 +17,7 @@ module.exports = {
   fgetattr,
   ftruncate,
   getattr,
+  getxattr,
   init,
   link,
   mkdir,
@@ -189,6 +190,46 @@ function getattr(path /*:string*/, cb /*:function*/) {
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.igetattr(dirent.inode, cb);
+  });
+}
+
+/**
+ * Read an extended attribute
+ *
+ * @param {String}   path
+ * @param {String}   name
+ * @param {Buffer}   buf
+ * @param {Number}   len
+ * @param {Number}   off
+ * @param {Function} cb
+ */
+function getxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[getxattr] path %s, name %s, len %d (bytes), off %d (bytes)', path, name, len, off);
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this extended attribute exist?
+      if (err)    { return cb(fuse.EIO); }
+      if (!inode) { return cb(fuse.ENOENT); }
+      if (!inode.xattr)       { return cb(fuse.ENODATA); }
+      if (!inode.xattr[name]) { return cb(fuse.ENODATA); }
+
+      // If destination buffer is size 0, return the length of the extended attribute.
+      // If too small, return an error.
+      // Otherwise copy it into place and return the length.
+      const xalen = inode.xattr[name].length();
+      if (!len) {
+        return cb(xalen);
+      } else if (len < xalen) {
+        return cb(fuse.ERANGE);
+
+      } else {
+        // inode.xattr[name] is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
+        const srcbuf = inode.xattr[name].read(0, len);
+        const copied = srcbuf.copy(buf, off);
+        return cb(copied);
+      }
+    });
   });
 }
 
