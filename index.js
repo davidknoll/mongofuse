@@ -45,7 +45,7 @@ if (require.main === module) {
 
   global.VERBOSE_LEVEL = argv.verbose;
   if (Array.isArray(argv.options)) {
-    argv.o = argv.options = argv.options.filter(function (opt) { return typeof opt === 'string'; }).join();
+    argv.o = argv.options = argv.options.filter(opt => typeof opt === 'string').join();
   }
   if (typeof argv.options === 'string') {
     argv.o = argv.options = argv.options.split(',');
@@ -77,13 +77,13 @@ function main(argv /*:{_:Array<string>}*/) /*:number*/ {
     mf.INFO("Mounting with options: %s", ops.options.join(", "));
   }
 
-  fuse.mount(mountPath, ops, function (err) {
+  fuse.mount(mountPath, ops, err => {
     if (err) { throw err; }
     mf.INFO("Filesystem mounted at: %s", mountPath);
   });
 
-  process.on('SIGINT', function () {
-    fuse.unmount(mountPath, function () {
+  process.on('SIGINT', () => {
+    fuse.unmount(mountPath, () => {
       mf.INFO("Unmounted");
       process.exit();
     });

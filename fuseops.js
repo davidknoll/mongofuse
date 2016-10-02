@@ -55,10 +55,10 @@ function access(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mf.DEBUG('[access] path %s, mode %d (dec)', path, mode);
 
   // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       // Check the requested permission against the inode
@@ -80,10 +80,10 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
   mf.DEBUG('[chmod] path %s, mode %d (dec)', path, mode);
 
   // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -98,7 +98,7 @@ function chmod(path /*:string*/, mode /*:number*/, cb /*:function*/) {
       if (context.uid !== 0 && context.uid !== doc.uid) { return cb(fuse.EPERM); }
 
       // Save changes
-      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
+      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
       });
@@ -122,10 +122,10 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
   mf.DEBUG('[chown] path %s, uid %d, gid %d', path, uid, gid);
 
   // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -140,7 +140,7 @@ function chown(path /*:string*/, uid /*:number*/, gid /*:number*/, cb /*:functio
       if (context.uid !== 0 && gid !== -1 && !mf.useringroup(context.uid, gid)) { return cb(fuse.EPERM); }
 
       // Save changes
-      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
+      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
       });
@@ -186,7 +186,7 @@ function ftruncate(path /*:string*/, fd /*:number*/, size /*:number*/, cb /*:fun
  */
 function getattr(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[getattr] path %s', path);
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.igetattr(dirent.inode, cb);
   });
@@ -202,7 +202,7 @@ function init(cb /*:function*/) {
   mf.DEBUG('[init]');
 
   // Does the root directory exist?
-  mf.resolvePath("/", function (err, dirent) {
+  mf.resolvePath("/", (err, dirent) => {
     if (err === fuse.ENOENT) {
       mf.INFO("Creating root directory");
       // Create the root directory's inode, using details of invoking user
@@ -216,7 +216,7 @@ function init(cb /*:function*/) {
         mtime: Date.now(),
         atime: Date.now()
 
-      }, function (err, doc) {
+      }, (err, doc) => {
         if (err) { return cb(fuse.EIO); }
         // Create the root directory entry, identified by null parent and empty name
         mf.db.directory.insert({
@@ -224,7 +224,7 @@ function init(cb /*:function*/) {
           parent: null,
           inode:  doc._id
 
-        }, function (err, doc) {
+        }, (err, doc) => {
           if (err) { return cb(fuse.EIO); }
           cb(0);
         });
@@ -247,25 +247,23 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   let target;
 
   async.waterfall([
-    function (acb) {
-      // Look up the target's directory entry, to get its inode number
-      mf.resolvePath(src, acb);
-    },
+    // Look up the target's directory entry, to get its inode number
+    acb => mf.resolvePath(src, acb),
 
-    function (srcdirent, acb) {
+    (srcdirent, acb) => {
       target = srcdirent.inode;
       // Look up that inode, to check it's not a directory
       mf.db.inodes.findOne({ _id: target }, { data: false }, acb);
     },
 
-    function (srcinode, acb) {
+    (srcinode, acb) => {
       if (!srcinode) { return acb(fuse.ENOENT); }
       if ((srcinode.mode & 0o170000) === 0o040000) { return acb(fuse.EPERM); }
       // Look up the new link's parent directory entry
       mf.resolvePath(path.dirname(dest), acb);
     },
 
-    function (destpdirent, acb) {
+    (destpdirent, acb) => {
       // Create the new directory entry
       const newdirent = {
         name:   path.basename(dest),
@@ -275,7 +273,7 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
       mf.db.directory.insert(newdirent, acb);
     }
 
-  ], function (err, result) {
+  ], (err, result) => {
     // FUSE errors (from resolvePath), MongoDB errors, success
     if (err < 0) { return cb(err); }
     if (err)     { return cb(fuse.EIO); }
@@ -335,10 +333,10 @@ function open(path /*:string*/, flags /*:number*/, cb /*:function*/) {
   mf.DEBUG('[open] path %s, flags %d (dec)', path, flags);
 
   // If this is a new file it will already have been created by mknod
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // Look up the inode...
-    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
 
@@ -380,13 +378,13 @@ function read(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*/
   if ((mf.openFiles[fd].flags & 0x3) === 0x1) { return cb(fuse.EBADF); }
 
   // Look up the inode of the open file
-  mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
+  mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, (err, doc) => {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
     if ((doc.mode & 0o170000) === 0o040000) { return cb(fuse.EISDIR); }
 
     // Does the atime need updating?
-    mf.chkatime(doc, function (err) {
+    mf.chkatime(doc, err => {
       if (err)       { return cb(fuse.EIO); }
       if (!doc.data) { return cb(0); }
       // doc.data is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
@@ -408,14 +406,14 @@ function readdir(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[readdir] path %s', path);
 
   // Look up the requested directory itself
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
 
     // Does the directory atime need updating?
     if (global.ATIME_LEVEL) {
-      mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, inode) {
+      mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, inode) => {
         if (err) { return cb(fuse.EIO); }
-        mf.chkatime(inode, function (err) {
+        mf.chkatime(inode, err => {
           if (err) { return cb(fuse.EIO); }
           readdir_inner();
         });
@@ -426,9 +424,9 @@ function readdir(path /*:string*/, cb /*:function*/) {
 
     function readdir_inner() {
       // Look up children of the requested directory
-      mf.db.directory.find({ parent: dirent._id }, function (err, docs) {
+      mf.db.directory.find({ parent: dirent._id }, (err, docs) => {
         if (err) { return cb(fuse.EIO); }
-        const names = docs.map(function (cdir) { return cdir.name; });
+        const names = docs.map(cdir => cdir.name);
         // According to POSIX we're only meant to return . and .. if the entries actually exist,
         // but if we don't they won't appear in a directory listing.
         // We don't need to process them further ourselves- the paths we get are already canonicalised.
@@ -451,15 +449,15 @@ function readlink(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[readlink] path %s', path);
 
   // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       if ((doc.mode & 0o170000) !== 0o120000) { return cb(fuse.EINVAL); }
       // Does the atime of the symlink itself need updating?
-      mf.chkatime(doc, function (err) {
+      mf.chkatime(doc, err => {
         if (err) { return cb(fuse.EIO); }
         // Get the target from the data, stored in the inode
         cb(0, doc.data.value());
@@ -502,18 +500,16 @@ function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
   let dirent;
 
   async.waterfall([
-    function (acb) {
-      // Look up the directory entry being renamed
-      mf.resolvePath(src, acb);
-    },
+    // Look up the directory entry being renamed
+    acb => mf.resolvePath(src, acb),
 
-    function (doc, acb) {
+    (doc, acb) => {
       // Look up the directory the renamed file will go in
       dirent = doc;
       mf.resolvePath(pathmod.dirname(dest), acb);
     },
 
-    function (pdirent, acb) {
+    (pdirent, acb) => {
       // Set the new name and parent
       const set = {
         name:   pathmod.basename(dest),
@@ -522,7 +518,7 @@ function rename(src /*:string*/, dest /*:string*/, cb /*:function*/) {
       mf.db.directory.update({ _id: dirent._id }, { $set: set }, acb);
     }
 
-  ], function (err, result) {
+  ], (err, result) => {
     // FUSE errors (from resolvePath), MongoDB errors, success
     if (err < 0) { return cb(err); }
     if (err)     { return cb(fuse.EIO); }
@@ -541,10 +537,10 @@ function rmdir(path /*:string*/, cb /*:function*/) {
   mf.DEBUG('[rmdir] path %s', path);
 
   // Look up the directory being deleted
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // See if it has any children, and if not, delete it
-    mf.db.directory.count({ parent: dirent._id }, function (err, cnt) {
+    mf.db.directory.count({ parent: dirent._id }, (err, cnt) => {
       if (err) { return cb(fuse.EIO); }
       if (cnt) { return cb(fuse.ENOTEMPTY); }
       unlink(path, cb);
@@ -586,7 +582,7 @@ function symlink(src /*:string*/, dest /*:string*/, cb /*:function*/) {
  */
 function truncate(path /*:string*/, size /*:number*/, cb /*:function*/) {
   mf.DEBUG('[truncate] path %s, size %d (bytes)', path, size);
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.itruncate(dirent.inode, size, cb);
   });
@@ -604,23 +600,21 @@ function unlink(path /*:string*/, cb /*:function*/) {
 
   let dirent;
   async.waterfall([
-    function (acb) {
-      // Look up the requested directory entry
-      mf.resolvePath(path, acb);
-    },
+    // Look up the requested directory entry
+    acb => mf.resolvePath(path, acb),
 
-    function (doc, acb) {
+    (doc, acb) => {
       // And remove it, now we know its inode
       dirent = doc;
       mf.db.directory.remove({ _id: dirent._id }, true, acb);
     },
 
-    function (doc, acb) {
+    (doc, acb) => {
       // Remove the inode if safe
       mf.iremove(dirent.inode, acb);
     }
 
-  ], function (err) {
+  ], err => {
     // FUSE errors (from resolvePath), MongoDB errors, success
     if (err < 0) { return cb(err); }
     if (err)     { return cb(fuse.EIO); }
@@ -641,10 +635,10 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
   mf.DEBUG('[utimens] path %s, atime %d (ms), mtime %d (ms)', path, atime, mtime);
 
   // Look up the requested directory entry
-  mf.resolvePath(path, function (err, dirent) {
+  mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     // And look up the inode it refers to
-    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, function (err, doc) {
+    mf.db.inodes.findOne({ _id: dirent.inode }, { data: false }, (err, doc) => {
       if (err)  { return cb(fuse.EIO); }
       if (!doc) { return cb(fuse.ENOENT); }
       // Store times as UNIX timestamps in milliseconds
@@ -656,7 +650,7 @@ function utimens(path /*:string*/, atime /*:Date*/, mtime /*:Date*/, cb /*:funct
         mtime: mtime.getTime(),
         ctime: Date.now()
       };
-      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, function (err, result) {
+      mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
         if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
         cb(0);
       });
@@ -683,7 +677,7 @@ function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*
   if ((mf.openFiles[fd].flags & 0x3) === 0x0) { return cb(fuse.EBADF); }
 
   // Look up the inode of the open file
-  mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, function (err, doc) {
+  mf.db.inodes.findOne({ _id: mf.openFiles[fd].inode }, (err, doc) => {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
     if ((doc.mode & 0o170000) === 0o040000) { return cb(fuse.EISDIR); }
@@ -705,7 +699,7 @@ function write(path /*:string*/, fd /*:number*/, buf /*:Buffer*/, len /*:number*
       data:  doc.data
     };
 
-    mf.db.inodes.update({ _id: mf.openFiles[fd].inode }, { $set: set }, function (err, result) {
+    mf.db.inodes.update({ _id: mf.openFiles[fd].inode }, { $set: set }, (err, result) => {
       if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
       cb(copied);
     });
