@@ -31,6 +31,7 @@ module.exports = {
   releasedir: release,
   rename,
   rmdir,
+  setxattr,
   symlink,
   truncate,
   unlink,
@@ -205,6 +206,7 @@ function getattr(path /*:string*/, cb /*:function*/) {
  */
 function getxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, cb /*:function*/) {
   mf.DEBUG('[getxattr] path %s, name %s, len %d (bytes), off %d (bytes)', path, name, len, off);
+  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
@@ -585,6 +587,39 @@ function rmdir(path /*:string*/, cb /*:function*/) {
       if (err) { return cb(fuse.EIO); }
       if (cnt) { return cb(fuse.ENOTEMPTY); }
       unlink(path, cb);
+    });
+  });
+}
+
+/**
+ * Write an extended attribute
+ *
+ * @param {String}   path
+ * @param {String}   name
+ * @param {Buffer}   buf
+ * @param {Number}   len
+ * @param {Number}   off
+ * @param {Number}   flags
+ * @param {Function} cb
+ */
+function setxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, flags /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[setxattr] path %s, name %s, len %d (bytes), off %d (bytes), flags %d (dec)', path, name, len, off, flags);
+  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+
+    // Make sure we have a buffer of exactly the size of the write data
+    const dstbuf = new Buffer(len);
+    dstbuf.fill(0);
+    buf.copy(dstbuf, 0, off, off + len);
+
+    // And write just that value to the db
+    const set = {
+      [ 'xattr.' + name ]: new mongojs.Binary(dstbuf)
+    };
+    mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
+      if (err) { return cb(fuse.EIO); }
+      return cb(0);
     });
   });
 }

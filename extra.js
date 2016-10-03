@@ -31,6 +31,7 @@ module.exports = {
   },
   resolvePath,
   useringroup,
+  validKey,
 
   // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
   WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
@@ -303,4 +304,18 @@ function chkatime(inode /*:{_id:string,atime:number,ctime:number,mtime:number}*/
     // Doesn't need updating
     cb(0);
   }
+}
+
+/**
+ * Checks whether a string is a valid field name in MongoDB.
+ *
+ * @see https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
+ * @param   {String} key
+ * @returns {Boolean}
+ */
+function validKey(key /*:string*/) {
+  if (key.charAt(0)    === '$') { return false; }
+  if (key.indexOf('.')  !== -1) { return false; }
+  if (key.indexOf('\0') !== -1) { return false; }
+  return true;
 }
