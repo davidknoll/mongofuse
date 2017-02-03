@@ -56,3 +56,10 @@ The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).
 * I don't know if it works on OSes other than Linux, I haven't tried.
 * Performance is probably pants, due to things like lack of caching,
 and storing the data itself within the inode document.
+
+
+### OSX install
+Check the fuse-binding(https://github.com/mafintosh/fuse-bindings) requirement for osx : you need to install OSXFuse(https://osxfuse.github.io/) and pkg-config (brew install pkg-config)
+
+### Use within a docker container
+Make sure you add the following params on the docker run command --cap-add=MKNOD --cap-add=SYS_ADMIN --device=/dev/fuse 
