@@ -11,6 +11,8 @@
 
 // Exports
 module.exports = {
+  b64dec,
+  b64enc,
   chkaccess,
   chkatime,
   // MongoJS database object
@@ -31,7 +33,6 @@ module.exports = {
   },
   resolvePath,
   useringroup,
-  validKey,
 
   // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
   WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
@@ -307,15 +308,23 @@ function chkatime(inode /*:{_id:string,atime:number,ctime:number,mtime:number}*/
 }
 
 /**
- * Checks whether a string is a valid field name in MongoDB.
+ * Encode a string in Base64
  *
- * @see https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
- * @param   {String} key
- * @returns {Boolean}
+ * @param   {String} str
+ * @returns {String}
  */
-function validKey(key /*:string*/) {
-  if (key.charAt(0)    === '$') { return false; }
-  if (key.indexOf('.')  !== -1) { return false; }
-  if (key.indexOf('\0') !== -1) { return false; }
-  return true;
+function b64enc(str /*:string*/) {
+  const buf = new Buffer(str);
+  return buf.toString('base64');
+}
+
+/**
+ * Decode a string from Base64
+ *
+ * @param   {String} str
+ * @returns {String}
+ */
+function b64dec(str /*:string*/) {
+  const buf = new Buffer(str, 'base64');
+  return buf.toString();
 }

@@ -208,20 +208,21 @@ function getattr(path /*:string*/, cb /*:function*/) {
  */
 function getxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, cb /*:function*/) {
   mf.DEBUG('[getxattr] path %s, name %s, len %d (bytes), off %d (bytes)', path, name, len, off);
-  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
+  const bname = mf.b64enc(name);
+
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
       // Does this extended attribute exist?
       if (err)    { return cb(fuse.EIO); }
       if (!inode) { return cb(fuse.ENOENT); }
-      if (!inode.xattr)       { return cb(fuse.ENODATA); }
-      if (!inode.xattr[name]) { return cb(fuse.ENODATA); }
+      if (!inode.xattr)        { return cb(fuse.ENODATA); }
+      if (!inode.xattr[bname]) { return cb(fuse.ENODATA); }
 
       // If destination buffer is size 0, return the length of the extended attribute.
       // If too small, return an error.
       // Otherwise copy it into place and return the length.
-      const xalen = inode.xattr[name].length();
+      const xalen = inode.xattr[bname].length();
       if (!len) {
         return cb(xalen);
       } else if (len < xalen) {
@@ -229,7 +230,7 @@ function getxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:nu
 
       } else {
         // inode.xattr[name] is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
-        const srcbuf = inode.xattr[name].read(0, len);
+        const srcbuf = inode.xattr[bname].read(0, len);
         const copied = srcbuf.copy(buf, off);
         return cb(copied);
       }
@@ -345,7 +346,7 @@ function listxattr(path /*:string*/, buf /*:Buffer*/, len /*:number*/, cb /*:fun
       if (!inode)       { return cb(fuse.ENOENT); }
       if (!inode.xattr) { return cb(0); }
 
-      const keys = Object.keys(inode.xattr);
+      const keys = Object.keys(inode.xattr).map(mf.b64dec);
       if (!keys.length) { return cb(0); }
       const result = keys.join('\0') + '\0';
 
@@ -579,7 +580,8 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
  */
 function removexattr(path /*:string*/, name /*:string*/, cb /*:function*/) {
   mf.DEBUG('[removexattr] path %s, name %s', path, name);
-  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
+  const bname = mf.b64enc(name);
+
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
     mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
@@ -588,12 +590,12 @@ function removexattr(path /*:string*/, name /*:string*/, cb /*:function*/) {
       if (!inode) { return cb(fuse.ENOENT); }
       // Supposedly ENODATA on Linux but ENOATTR on OS X,
       // but fuse-bindings doesn't define ENOATTR.
-      if (!inode.xattr)       { return cb(fuse.ENODATA); }
-      if (!inode.xattr[name]) { return cb(fuse.ENODATA); }
+      if (!inode.xattr)        { return cb(fuse.ENODATA); }
+      if (!inode.xattr[bname]) { return cb(fuse.ENODATA); }
 
       // Unset the field within the xattr sub-document
       const unset = {
-        [ 'xattr.' + name ]: 1
+        [ 'xattr.' + bname ]: 1
       };
       mf.db.inodes.update({ _id: dirent.inode }, { $unset: unset }, (err, result) => {
         if (err) { return cb(fuse.EIO); }
@@ -678,7 +680,8 @@ function rmdir(path /*:string*/, cb /*:function*/) {
  */
 function setxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, flags /*:number*/, cb /*:function*/) {
   mf.DEBUG('[setxattr] path %s, name %s, len %d (bytes), off %d (bytes), flags %d (dec)', path, name, len, off, flags);
-  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
+  const bname = mf.b64enc(name);
+
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
 
@@ -689,7 +692,7 @@ function setxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:nu
 
     // And write just that value to the db
     const set = {
-      [ 'xattr.' + name ]: new mongojs.Binary(dstbuf)
+      [ 'xattr.' + bname ]: new mongojs.Binary(dstbuf)
     };
     mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
       if (err) { return cb(fuse.EIO); }
