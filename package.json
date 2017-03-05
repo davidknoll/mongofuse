@@ -30,7 +30,7 @@
   "homepage": "https://github.com/davidknoll/mongofuse#readme",
   "dependencies": {
     "async": "^1.5.2",
-    "fuse-bindings": "^2.8.1",
+    "fuse-bindings": "https://github.com/davidknoll/fuse-bindings/tarball/xattr-list-remove",
     "mongojs": "^2.4.0",
     "posix": "^4.0.2",
     "yargs": "^4.7.1"

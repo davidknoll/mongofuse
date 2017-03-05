@@ -20,6 +20,7 @@ module.exports = {
   getxattr,
   init,
   link,
+  listxattr,
   mkdir,
   mknod,
   open,
@@ -29,6 +30,7 @@ module.exports = {
   readlink,
   release,
   releasedir: release,
+  removexattr,
   rename,
   rmdir,
   setxattr,
@@ -325,6 +327,44 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
 }
 
 /**
+ * List extended attributes
+ *
+ * @param   {String}   path
+ * @param   {Buffer}   buf
+ * @param   {Number}   len
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function listxattr(path /*:string*/, buf /*:Buffer*/, len /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[listxattr] path %s, len %d (bytes)', path, len);
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this inode have extended attributes?
+      if (err)          { return cb(fuse.EIO); }
+      if (!inode)       { return cb(fuse.ENOENT); }
+      if (!inode.xattr) { return cb(0); }
+
+      const keys = Object.keys(inode.xattr);
+      if (!keys.length) { return cb(0); }
+      const result = keys.join('\0') + '\0';
+
+      // If destination buffer is size 0, return the length of buffer required.
+      // If too small, return an error.
+      // Otherwise copy it into place and return the length.
+      if (!len) {
+        return cb(result.length);
+      } else if (len < result.length) {
+        return cb(fuse.ERANGE);
+      } else {
+        buf.write(result);
+        return cb(result.length);
+      }
+    });
+  });
+}
+
+/**
  * Create directory
  *
  * @param   {String}   path
@@ -527,6 +567,30 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
 
   // Remove the inode if it has no more references
   mf.iremove(inode, cb);
+}
+
+/**
+ * Remove extended attribute
+ *
+ * @param   {String}   path
+ * @param   {String}   name
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function removexattr(path /*:string*/, name /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[removexattr] path %s, name %s', path, name);
+  if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+
+    const unset = {
+      [ 'xattr.' + name ]: 1
+    };
+    mf.db.inodes.update({ _id: dirent.inode }, { $unset: unset }, (err, result) => {
+      if (err) { return cb(fuse.EIO); }
+      return cb(0);
+    });
+  });
 }
 
 /**
