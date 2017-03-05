@@ -582,13 +582,23 @@ function removexattr(path /*:string*/, name /*:string*/, cb /*:function*/) {
   if (!mf.validKey(name)) { return cb(fuse.ENOTSUP); }
   mf.resolvePath(path, (err, dirent) => {
     if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this extended attribute exist?
+      if (err)    { return cb(fuse.EIO); }
+      if (!inode) { return cb(fuse.ENOENT); }
+      // Supposedly ENODATA on Linux but ENOATTR on OS X,
+      // but fuse-bindings doesn't define ENOATTR.
+      if (!inode.xattr)       { return cb(fuse.ENODATA); }
+      if (!inode.xattr[name]) { return cb(fuse.ENODATA); }
 
-    const unset = {
-      [ 'xattr.' + name ]: 1
-    };
-    mf.db.inodes.update({ _id: dirent.inode }, { $unset: unset }, (err, result) => {
-      if (err) { return cb(fuse.EIO); }
-      return cb(0);
+      // Unset the field within the xattr sub-document
+      const unset = {
+        [ 'xattr.' + name ]: 1
+      };
+      mf.db.inodes.update({ _id: dirent.inode }, { $unset: unset }, (err, result) => {
+        if (err) { return cb(fuse.EIO); }
+        return cb(0);
+      });
     });
   });
 }
