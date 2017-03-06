@@ -38,8 +38,7 @@ You can't chmod/chown/chgrp when you shouldn't be allowed to.
 * Accepts basic FUSE mount options on the command line (eg. `-o allow_other`)
 * The size is now stored explicitly in the inode, avoiding looking up
 the data if it's only the attributes we're interested in.
-* Extended attributes. As fuse-bindings does not currently provide
-the listxattr or removexattr functions, I have switched to my own fork.
+* Extended attributes
 
 ### Things that don't work / aren't present (yet)
 * Directory permissions are partially but not fully enforced.
