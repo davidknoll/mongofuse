@@ -38,6 +38,7 @@ You can't chmod/chown/chgrp when you shouldn't be allowed to.
 * Accepts basic FUSE mount options on the command line (eg. `-o allow_other`)
 * The size is now stored explicitly in the inode, avoiding looking up
 the data if it's only the attributes we're interested in.
+* Extended attributes
 
 ### Things that don't work / aren't present (yet)
 * Directory permissions are partially but not fully enforced.
@@ -49,7 +50,6 @@ although reading/listing permissions are enforced.
 that are passed to my utimens function jump about non-monotonically over a
 number of minutes. They can also be a number of minutes away from `Date.now()`
 which is what the ctime gets set to. I don't think my filesystem is to blame.
-* extended attributes
 * Files larger than just under 16MB, due to the maximum document size in MongoDB.
 I now check for this and return EFBIG from ftruncate/truncate/write.
 The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).

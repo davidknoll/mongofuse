@@ -11,6 +11,8 @@
 
 // Exports
 module.exports = {
+  b64dec,
+  b64enc,
   chkaccess,
   chkatime,
   // MongoJS database object
@@ -303,4 +305,26 @@ function chkatime(inode /*:{_id:string,atime:number,ctime:number,mtime:number}*/
     // Doesn't need updating
     cb(0);
   }
+}
+
+/**
+ * Encode a string in Base64
+ *
+ * @param   {String} str
+ * @returns {String}
+ */
+function b64enc(str /*:string*/) {
+  const buf = new Buffer(str);
+  return buf.toString('base64');
+}
+
+/**
+ * Decode a string from Base64
+ *
+ * @param   {String} str
+ * @returns {String}
+ */
+function b64dec(str /*:string*/) {
+  const buf = new Buffer(str, 'base64');
+  return buf.toString();
 }

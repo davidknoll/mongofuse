@@ -17,8 +17,10 @@ module.exports = {
   fgetattr,
   ftruncate,
   getattr,
+  getxattr,
   init,
   link,
+  listxattr,
   mkdir,
   mknod,
   open,
@@ -28,8 +30,10 @@ module.exports = {
   readlink,
   release,
   releasedir: release,
+  removexattr,
   rename,
   rmdir,
+  setxattr,
   symlink,
   truncate,
   unlink,
@@ -193,6 +197,48 @@ function getattr(path /*:string*/, cb /*:function*/) {
 }
 
 /**
+ * Read an extended attribute
+ *
+ * @param {String}   path
+ * @param {String}   name
+ * @param {Buffer}   buf
+ * @param {Number}   len
+ * @param {Number}   off
+ * @param {Function} cb
+ */
+function getxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[getxattr] path %s, name %s, len %d (bytes), off %d (bytes)', path, name, len, off);
+  const bname = mf.b64enc(name);
+
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this extended attribute exist?
+      if (err)    { return cb(fuse.EIO); }
+      if (!inode) { return cb(fuse.ENOENT); }
+      if (!inode.xattr)        { return cb(fuse.ENODATA); }
+      if (!inode.xattr[bname]) { return cb(fuse.ENODATA); }
+
+      // If destination buffer is size 0, return the length of the extended attribute.
+      // If too small, return an error.
+      // Otherwise copy it into place and return the length.
+      const xalen = inode.xattr[bname].length();
+      if (!len) {
+        return cb(xalen);
+      } else if (len < xalen) {
+        return cb(fuse.ERANGE);
+
+      } else {
+        // inode.xattr[name] is a MongoDB "Binary" object. read()ing it gives a Node "Buffer" object.
+        const srcbuf = inode.xattr[bname].read(0, len);
+        const copied = srcbuf.copy(buf, off);
+        return cb(copied);
+      }
+    });
+  });
+}
+
+/**
  * Called on filesystem init, sets up a root directory if it's a new instance
  *
  * @param   {Function} cb
@@ -278,6 +324,44 @@ function link(src /*:string*/, dest /*:string*/, cb /*:function*/) {
     if (err < 0) { return cb(err); }
     if (err)     { return cb(fuse.EIO); }
     cb(0);
+  });
+}
+
+/**
+ * List extended attributes
+ *
+ * @param   {String}   path
+ * @param   {Buffer}   buf
+ * @param   {Number}   len
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function listxattr(path /*:string*/, buf /*:Buffer*/, len /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[listxattr] path %s, len %d (bytes)', path, len);
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this inode have extended attributes?
+      if (err)          { return cb(fuse.EIO); }
+      if (!inode)       { return cb(fuse.ENOENT); }
+      if (!inode.xattr) { return cb(0); }
+
+      const keys = Object.keys(inode.xattr).map(mf.b64dec);
+      if (!keys.length) { return cb(0); }
+      const result = keys.join('\0') + '\0';
+
+      // If destination buffer is size 0, return the length of buffer required.
+      // If too small, return an error.
+      // Otherwise copy it into place and return the length.
+      if (!len) {
+        return cb(result.length);
+      } else if (len < result.length) {
+        return cb(fuse.ERANGE);
+      } else {
+        buf.write(result);
+        return cb(result.length);
+      }
+    });
   });
 }
 
@@ -487,6 +571,41 @@ function release(path /*:string*/, fd /*:number*/, cb /*:function*/) {
 }
 
 /**
+ * Remove extended attribute
+ *
+ * @param   {String}   path
+ * @param   {String}   name
+ * @param   {Function} cb
+ * @returns {undefined}
+ */
+function removexattr(path /*:string*/, name /*:string*/, cb /*:function*/) {
+  mf.DEBUG('[removexattr] path %s, name %s', path, name);
+  const bname = mf.b64enc(name);
+
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+    mf.db.inodes.findOne({ _id: dirent.inode }, { xattr: true }, (err, inode) => {
+      // Does this extended attribute exist?
+      if (err)    { return cb(fuse.EIO); }
+      if (!inode) { return cb(fuse.ENOENT); }
+      // Supposedly ENODATA on Linux but ENOATTR on OS X,
+      // but fuse-bindings doesn't define ENOATTR.
+      if (!inode.xattr)        { return cb(fuse.ENODATA); }
+      if (!inode.xattr[bname]) { return cb(fuse.ENODATA); }
+
+      // Unset the field within the xattr sub-document
+      const unset = {
+        [ 'xattr.' + bname ]: 1
+      };
+      mf.db.inodes.update({ _id: dirent.inode }, { $unset: unset }, (err, result) => {
+        if (err) { return cb(fuse.EIO); }
+        return cb(0);
+      });
+    });
+  });
+}
+
+/**
  * Rename a file
  *
  * @param   {String}   src
@@ -544,6 +663,40 @@ function rmdir(path /*:string*/, cb /*:function*/) {
       if (err) { return cb(fuse.EIO); }
       if (cnt) { return cb(fuse.ENOTEMPTY); }
       unlink(path, cb);
+    });
+  });
+}
+
+/**
+ * Write an extended attribute
+ *
+ * @param {String}   path
+ * @param {String}   name
+ * @param {Buffer}   buf
+ * @param {Number}   len
+ * @param {Number}   off
+ * @param {Number}   flags
+ * @param {Function} cb
+ */
+function setxattr(path /*:string*/, name /*:string*/, buf /*:Buffer*/, len /*:number*/, off /*:number*/, flags /*:number*/, cb /*:function*/) {
+  mf.DEBUG('[setxattr] path %s, name %s, len %d (bytes), off %d (bytes), flags %d (dec)', path, name, len, off, flags);
+  const bname = mf.b64enc(name);
+
+  mf.resolvePath(path, (err, dirent) => {
+    if (err) { return cb(err); }
+
+    // Make sure we have a buffer of exactly the size of the write data
+    const dstbuf = new Buffer(len);
+    dstbuf.fill(0);
+    buf.copy(dstbuf, 0, off, off + len);
+
+    // And write just that value to the db
+    const set = {
+      [ 'xattr.' + bname ]: new mongojs.Binary(dstbuf)
+    };
+    mf.db.inodes.update({ _id: dirent.inode }, { $set: set }, (err, result) => {
+      if (err) { return cb(fuse.EIO); }
+      return cb(0);
     });
   });
 }
