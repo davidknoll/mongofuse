@@ -35,9 +35,9 @@ module.exports = {
   useringroup,
 
   // https://www.npmjs.com/package/yargs#yargs-even-counts-your-booleans
-  WARN:  function WARN()  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
-  INFO:  function INFO()  { global.VERBOSE_LEVEL >= 1 && console.log.apply(console, arguments); },
-  DEBUG: function DEBUG() { global.VERBOSE_LEVEL >= 2 && console.log.apply(console, arguments); }
+  WARN:  function WARN(...args /*:any[]*/)  { global.VERBOSE_LEVEL >= 0 && console.log.apply(console, arguments); },
+  INFO:  function INFO(...args /*:any[]*/)  { global.VERBOSE_LEVEL >= 1 && console.log.apply(console, arguments); },
+  DEBUG: function DEBUG(...args /*:any[]*/) { global.VERBOSE_LEVEL >= 2 && console.log.apply(console, arguments); }
 };
 const mf = module.exports;
 

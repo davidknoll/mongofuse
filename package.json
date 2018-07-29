@@ -9,7 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "flow": "flow; test $? -eq 0 -o $? -eq 2",
-    "jsdoc": "jsdoc .",
+    "jsdoc": "jsdoc -d jsdoc -R README.md .",
     "start": "node index.js"
   },
   "repository": {
@@ -30,13 +30,13 @@
   "homepage": "https://github.com/davidknoll/mongofuse#readme",
   "dependencies": {
     "async": "^1.5.2",
-    "fuse-bindings": "^2.11.0",
-    "mongojs": "^2.4.0",
-    "posix": "^4.0.2",
+    "fuse-bindings": "^2.11.2",
+    "mongojs": "^2.6.0",
+    "posix": "^4.1.2",
     "yargs": "^4.7.1"
   },
   "devDependencies": {
-    "flow-bin": "^0.24.1",
-    "jsdoc": "^3.4.0"
+    "flow-bin": "^0.77.0",
+    "jsdoc": "^3.5.5"
   }
 }

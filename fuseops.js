@@ -25,6 +25,7 @@ module.exports = {
   mknod,
   open,
   opendir: open,
+  options: [],
   read,
   readdir,
   readlink,
@@ -253,7 +254,6 @@ function init(cb /*:function*/) {
       mf.INFO("Creating root directory");
       // Create the root directory's inode, using details of invoking user
       mf.db.inodes.insert({
-        // $FlowIssue argument to umask is optional, see the docs
         mode:  0o040777 & ~process.umask(),
         uid:   process.geteuid ? process.geteuid() : 0, // Only on POSIX platforms
         gid:   process.getegid ? process.getegid() : 0, // Only on POSIX platforms

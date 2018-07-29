@@ -93,5 +93,7 @@ bh_unicode_properties.cache
 GitHub.sublime-settings
 
 
-### JSDoc ###
-out/
+### Other ###
+db/
+jsdoc/
+package-lock.json
