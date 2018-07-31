@@ -15,8 +15,6 @@ module.exports = {
   b64enc,
   chkaccess,
   chkatime,
-  // MongoJS database object
-  db: ({} /*:Object*/), // Filled in by main()
   doMknod,
   igetattr,
   iremove,
@@ -44,8 +42,10 @@ const mf = module.exports;
 // Imports
 const async   = require('async');
 const fuse    = require('fuse-bindings');
-const mongojs = require('mongojs');
 const posix   = require('posix');
+const schema  = require('./schema');
+const Directory = schema.Directory;
+const Inode     = schema.Inode;
 
 /**
  * Create an inode and a corresponding directory entry from the provided data
@@ -63,7 +63,7 @@ function doMknod(path /*:string*/, inode /*:Object*/, cb /*:function*/) {
   mf.resolvePath(pathmod.dirname(path), (err, dirent) => {
     if (err) { return cb(err); }
     // Create the inode for the new file (we need its _id for the directory)
-    mf.db.inodes.insert(inode, (err, doc) => {
+    new Inode(inode).save((err, doc) => {
       if (err) { return cb(fuse.EIO); }
       // Create the new directory entry
       const newdir = {
@@ -71,7 +71,7 @@ function doMknod(path /*:string*/, inode /*:Object*/, cb /*:function*/) {
         parent: dirent._id,
         inode:  doc._id
       };
-      mf.db.directory.insert(newdir, (err, doc) => {
+      new Directory(newdir).save((err, doc) => {
         if (err) { return cb(fuse.EIO); }
         cb(0);
       });
@@ -100,7 +100,7 @@ function resolvePath(path /*:string*/, cb /*:function*/) {
     (pdoc, cb) => {
       // Look up one component of the path in the directory, return its entry
       // The root is represented with a null parent and an empty-string name
-      mf.db.directory.findOne({ name: name, parent: pdoc._id }, (err, doc) => {
+      Directory.findOne({ name: name, parent: pdoc._id }, (err, doc) => {
         if (err)  { return cb(fuse.EIO,    null); }
         if (!doc) { return cb(fuse.ENOENT, null); }
         cb(null, doc);
@@ -125,7 +125,7 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
   mf.DEBUG('Truncate inode %s to %d bytes', inode, size);
 
   // Look up that inode
-  mf.db.inodes.findOne({ _id: inode }, (err, doc) => {
+  Inode.findById(inode, (err, doc) => {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
     // Permissions?
@@ -137,15 +137,15 @@ function itruncate(inode /*:string*/, size /*:number*/, cb /*:function*/) {
 
     // Truncate to the requested size, by copying into a buffer of that size
     const buf = new Buffer(size).fill(0);
-    if (doc.data) { doc.data.read(0, size).copy(buf); }
+    if (doc.data) { doc.data.copy(buf, 0, 0, size); }
     // Update the inode
     const set = {
       ctime: Date.now(),
       mtime: Date.now(),
-      data:  new mongojs.Binary(buf, 0)
+      data:  buf
     };
 
-    mf.db.inodes.update({ _id: inode }, { $set: set }, (err, result) => {
+    Inode.findByIdAndUpdate(inode, { $set: set }, (err, result) => {
       if (err || !result.ok || !result.n) { return cb(fuse.EIO); }
       cb(0);
     });
@@ -163,24 +163,24 @@ function igetattr(inode /*:string*/, cb /*:function*/) {
   mf.DEBUG('Get attributes of inode %s', inode);
 
   // Look up that inode
-  mf.db.inodes.findOne({ _id: inode }, { data: false }, (err, doc) => {
+  Inode.findById(inode, { data: false }, (err, doc) => {
     if (err)  { return cb(fuse.EIO); }
     if (!doc) { return cb(fuse.ENOENT); }
 
     // Look up link count, required to support hardlinks
-    mf.db.directory.count({ inode: inode }, (err, cnt) => {
+    Directory.count({ inode: inode }, (err, cnt) => {
       if (err) { return cb(fuse.EIO); }
       doc.nlink = cnt;
 
       // Find and store the size if we didn't already have it
       if (doc.size === undefined) {
         mf.DEBUG('Size not stored, finding it');
-        mf.db.inodes.findOne({ _id: inode }, (err, idoc) => {
+        Inode.findById(inode, (err, idoc) => {
           if (err)   { return cb(fuse.EIO); }
           if (!idoc) { return cb(fuse.ENOENT); }
           doc.size = idoc.data ? idoc.data.length() : 0;
 
-          mf.db.inodes.update({ _id: inode }, { $set: { size: doc.size } }, (err, iidoc) => {
+          Inode.findByIdAndUpdate(inode, { $set: { size: doc.size } }, (err, iidoc) => {
             if (err) { return cb(fuse.EIO); }
             return cb(0, doc);
           });
@@ -210,14 +210,14 @@ function iremove(inode /*:string*/, cb /*:function*/) {
   }
 
   // Look up refcount
-  mf.db.directory.count({ inode: inode }, (err, cnt) => {
+  Directory.count({ inode: inode }, (err, cnt) => {
     // Does it have any links?
     // note: is this a race condition (TOCTOU)?
     if (err) { return cb(fuse.EIO); }
     if (cnt) { return cb(0); }
 
     // If not, remove the inode
-    mf.db.inodes.remove({ _id: inode }, true, (err, res) => {
+    Inode.findByIdAndRemove(inode, (err, res) => {
       if (err) { return cb(fuse.EIO); }
       cb(0);
     });
@@ -300,7 +300,7 @@ function chkatime(inode /*:{_id:string,atime:number,ctime:number,mtime:number}*/
     // Update it
     mf.DEBUG('Updating atime for inode %s', inode._id);
     inode.atime = Date.now();
-    mf.db.inodes.update({ _id: inode._id }, { $set: { atime: inode.atime } }, cb);
+    Inode.findByIdAndUpdate(inode._id, { $set: { atime: inode.atime } }, cb);
   } else {
     // Doesn't need updating
     cb(0);

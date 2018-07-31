@@ -11,11 +11,11 @@
 'use strict';
 
 // Imports
-const fuse    = require('fuse-bindings');
-const mongojs = require('mongojs');
-const yargs   = require('yargs');
-const mf      = require('./extra.js');
-const ops     = require('./fuseops.js');
+const fuse     = require('fuse-bindings');
+const mongoose = require('mongoose');
+const yargs    = require('yargs');
+const mf       = require('./extra.js');
+const ops      = require('./fuseops.js');
 
 // Parse command-line arguments
 if (require.main === module) {
@@ -68,16 +68,20 @@ if (require.main === module) {
  * @returns {Number}
  */
 function main(argv /*:{_:Array<string>,options?:Array<string>}*/) /*:number*/ {
-  mf.db = mongojs(argv._[0], [ "directory", "inodes" ]);
+  const mongoUrl = argv._[0];
   const mountPath = argv._[1];
   if (Array.isArray(argv.options)) {
     ops.options = argv.options;
     mf.INFO("Mounting with options: %s", ops.options.join(", "));
   }
 
-  fuse.mount(mountPath, ops, err => {
+  mongoose.connect(mongoUrl, err => {
     if (err) { throw err; }
-    mf.INFO("Filesystem mounted at: %s", mountPath);
+    mf.INFO("Mongoose connected at: %s", mongoUrl);
+    fuse.mount(mountPath, ops, err => {
+      if (err) { throw err; }
+      mf.INFO("Filesystem mounted at: %s", mountPath);
+    });  
   });
 
   process.on('SIGINT', () => {
