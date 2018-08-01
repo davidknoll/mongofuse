@@ -20,6 +20,15 @@ directory where the filesystem is to be mounted.
 Mount options can be [some of these](http://blog.woralelandia.com/2012/07/16/fuse-mount-options/),
 as also linked from the [fuse-bindings](https://www.npmjs.com/package/fuse-bindings#mount-options) readme.
 
+### Use with macOS / OS X
+You will need to install [OSXFuse](https://osxfuse.github.io/) and `pkg-config`.
+If you use Homebrew, you can do this with `brew cask install osxfuse` and `brew install pkg-config`.
+You will need to authorise the kext in System Preferences.
+
+### Use within a docker container
+Make sure you add the following params on the `docker run` command:
+`--cap-add=MKNOD --cap-add=SYS_ADMIN --device=/dev/fuse`
+
 ### Things that work
 * The root directory is now created automatically when you start mongofuse with
 an empty database. This means you can actually try using it without manually
@@ -39,6 +48,7 @@ You can't chmod/chown/chgrp when you shouldn't be allowed to.
 * The size is now stored explicitly in the inode, avoiding looking up
 the data if it's only the attributes we're interested in.
 * Extended attributes
+* Works with macOS (using OSXFuse) as well as Linux
 
 ### Things that don't work / aren't present (yet)
 * Directory permissions are partially but not fully enforced.
@@ -53,13 +63,6 @@ which is what the ctime gets set to. I don't think my filesystem is to blame.
 * Files larger than just under 16MB, due to the maximum document size in MongoDB.
 I now check for this and return EFBIG from ftruncate/truncate/write.
 The solution to this is [GridFS](https://docs.mongodb.com/manual/core/gridfs/).
-* I don't know if it works on OSes other than Linux, I haven't tried.
+* Not yet tested on Windows, but may work with [Dokany](https://github.com/dokan-dev/dokany).
 * Performance is probably pants, due to things like lack of caching,
 and storing the data itself within the inode document.
-
-
-### OSX install
-Check the fuse-binding(https://github.com/mafintosh/fuse-bindings) requirement for osx : you need to install OSXFuse(https://osxfuse.github.io/) and pkg-config (brew install pkg-config)
-
-### Use within a docker container
-Make sure you add the following params on the docker run command --cap-add=MKNOD --cap-add=SYS_ADMIN --device=/dev/fuse 
