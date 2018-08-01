@@ -1,6 +1,6 @@
 {
   "name": "mongofuse",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "description": "A FUSE filesystem, powered by MongoDB and written in Node.js. Mostly an exercise for me to learn MongoDB and Node.js. It aims towards POSIX functionality for use as a regular filesystem.",
   "main": "index.js",
   "bin": {
