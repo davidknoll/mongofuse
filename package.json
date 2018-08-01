@@ -10,7 +10,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "flow": "flow; test $? -eq 0 -o $? -eq 2",
     "jsdoc": "jsdoc -d jsdoc -R README.md .",
-    "start": "node index.js"
+    "start": "node index.js",
+    "publish-please": "publish-please",
+    "prepublishOnly": "publish-please guard"
   },
   "repository": {
     "type": "git",
@@ -37,6 +39,7 @@
   },
   "devDependencies": {
     "flow-bin": "^0.77.0",
-    "jsdoc": "^3.5.5"
+    "jsdoc": "^3.5.5",
+    "publish-please": "^3.2.0"
   }
 }
